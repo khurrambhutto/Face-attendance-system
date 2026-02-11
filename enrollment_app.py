@@ -6,9 +6,12 @@ Simple workflow: Start → Enter Info → Capture → Save
 import streamlit as st
 import cv2
 import json
+import numpy as np
 from pathlib import Path
 from datetime import datetime
-from detector import YuNetDetector, init_camera
+from uuid import uuid4
+from supabase import create_client
+from detector import YuNetDetector
 
 
 # Page config
@@ -23,10 +26,8 @@ if 'step' not in st.session_state:
     st.session_state.step = 'start'
 if 'enrollment_captures' not in st.session_state:
     st.session_state.enrollment_captures = []
-if 'camera_active' not in st.session_state:
-    st.session_state.camera_active = False
-if 'cap' not in st.session_state:
-    st.session_state.cap = None
+if 'camera_input_counter' not in st.session_state:
+    st.session_state.camera_input_counter = 0
 if 'detector' not in st.session_state:
     with st.spinner("Getting things ready..."):
         st.session_state.detector = YuNetDetector()
@@ -42,6 +43,39 @@ PHOTOS_DIR = DATA_DIR / "photos"
 
 for dir_path in [DATA_DIR, EMBEDDINGS_DIR, METADATA_DIR, PHOTOS_DIR]:
     dir_path.mkdir(exist_ok=True)
+
+
+def get_supabase_client(show_error=False):
+    """Create Supabase client from Streamlit secrets."""
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
+
+    if not url or not key:
+        if show_error:
+            st.error("Supabase secrets missing. Add SUPABASE_URL and SUPABASE_KEY in Streamlit settings.")
+        return None
+
+    try:
+        return create_client(url, key)
+    except Exception as e:
+        if show_error:
+            st.error(f"Could not connect to Supabase: {e}")
+        return None
+
+
+def get_public_url(storage_bucket, file_path):
+    """Get a public URL and gracefully handle SDK return shape differences."""
+    public_url = storage_bucket.get_public_url(file_path)
+    if isinstance(public_url, str):
+        return public_url
+    if isinstance(public_url, dict):
+        return (
+            public_url.get("publicUrl")
+            or public_url.get("publicURL")
+            or public_url.get("signedURL")
+            or file_path
+        )
+    return file_path
 
 
 def load_embeddings():
@@ -175,6 +209,8 @@ def main():
                 if normalized_id and normalized_name:
                     embeddings_data = load_embeddings()
                     metadata_data = load_metadata()
+                    supabase = get_supabase_client(show_error=False)
+                    supabase_table = st.secrets.get("SUPABASE_TABLE", "enrollments")
 
                     existing_names = set()
                     for student in embeddings_data.get("students", {}).values():
@@ -183,6 +219,18 @@ def main():
                     for student in metadata_data.values():
                         if isinstance(student, dict) and student.get("name"):
                             existing_names.add(normalize_name(student["name"]))
+
+                    # Also check names already saved online in Supabase.
+                    if supabase:
+                        try:
+                            response = supabase.table(supabase_table).select("name").execute()
+                            for row in (response.data or []):
+                                name_value = row.get("name")
+                                if name_value:
+                                    existing_names.add(normalize_name(name_value))
+                        except Exception:
+                            # Keep app usable even if online read fails.
+                            pass
 
                     if normalize_name(normalized_name) in existing_names:
                         st.error("This name is already enrolled. You cannot enroll the same name twice.")
@@ -211,109 +259,71 @@ def main():
             st.info(f"Photos: {len(st.session_state.enrollment_captures)}/3")
         
         st.markdown("---")
-        
-        # Start camera
-        if not st.session_state.camera_active:
-            if st.button("Start Camera", type="primary", use_container_width=True):
-                cap, backend_name = init_camera()
-                if cap:
-                    st.session_state.cap = cap
-                    st.session_state.camera_active = True
-                    st.rerun()
-                else:
-                    st.error("Camera not available right now. Try again.")
-        else:
-            col_capture, col_done = st.columns([2, 1])
-            
-            with col_capture:
-                capture_btn = st.button("Take Photo", type="primary", use_container_width=True)
-            
-            with col_done:
-                if len(st.session_state.enrollment_captures) >= 3:
-                    if st.button("Continue", type="primary", use_container_width=True):
-                        st.session_state.step = 'save'
-                        st.session_state.camera_active = False
-                        if st.session_state.cap:
-                            st.session_state.cap.release()
-                            st.session_state.cap = None
-                        st.rerun()
-            
-            st.markdown("---")
-            
-            # Camera feed
-            frame_placeholder = st.empty()
-            status_placeholder = st.empty()
-            
-            while st.session_state.camera_active:
-                ret, frame = st.session_state.cap.read()
-                if not ret:
-                    break
-                
-                # Detect faces
+        st.caption("Use your phone/laptop camera, then tap Add Photo.")
+
+        camera_file = st.camera_input(
+            "Take a photo",
+            key=f"camera_photo_{st.session_state.camera_input_counter}"
+        )
+
+        if camera_file is not None:
+            file_bytes = np.frombuffer(camera_file.getvalue(), dtype=np.uint8)
+            frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                st.error("Could not read photo. Please retake.")
+            else:
                 faces, num_faces = st.session_state.detector.detect_raw(frame)
-                
                 display_frame = frame.copy()
-                
+                is_good = False
+
                 if faces is not None and num_faces > 0:
                     face = faces[0]
                     is_good, message = check_face_quality(frame, face)
-                    
                     x, y, w, h = int(face[0]), int(face[1]), int(face[2]), int(face[3])
                     color = (0, 255, 0) if is_good else (0, 0, 255)
-                    
                     cv2.rectangle(display_frame, (x, y), (x + w, y + h), color, 2)
-                    cv2.putText(display_frame, message, (10, 30),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                    
-                    status_placeholder.info(message)
+                    cv2.putText(display_frame, message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                    st.info(message)
                 else:
-                    status_placeholder.warning("No face found. Look at the camera.")
-                
-                # Display frame
-                frame_placeholder.image(display_frame, channels="BGR", use_container_width=True)
-                
-                # Handle capture
-                if capture_btn and faces is not None and num_faces > 0:
-                    face = faces[0]
-                    is_good, _ = check_face_quality(frame, face)
-                    
-                    if is_good:
-                        embedding = st.session_state.detector.get_face_embedding(frame, face)
-                        
-                        if embedding is not None:
-                            st.session_state.enrollment_captures.append({
-                                'embedding': embedding.tolist(),
-                                'image': cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            })
-                            st.success(f"Photo {len(st.session_state.enrollment_captures)}/3 captured.")
-                            st.rerun()
-                        else:
-                            st.error("Could not save this photo. Please try again.")
+                    st.warning("No face found. Please retake.")
+
+                st.image(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+
+                if st.button("Add Photo", type="primary", use_container_width=True, disabled=not is_good):
+                    embedding = st.session_state.detector.get_face_embedding(frame, faces[0])
+                    if embedding is None:
+                        st.error("Could not save this photo. Please retake.")
                     else:
-                        st.warning("Please adjust your position and try again.")
-                
-                import time
-                time.sleep(0.01)
-            
-            # Show captured photos
-            if st.session_state.enrollment_captures:
-                st.markdown("---")
-                st.subheader("Your Photos")
-                cols = st.columns(len(st.session_state.enrollment_captures))
-                for i, capture in enumerate(st.session_state.enrollment_captures):
-                    with cols[i]:
-                        st.image(capture['image'], caption=f"Photo {i+1}", use_container_width=True)
-            
-            # Back button
+                        st.session_state.enrollment_captures.append({
+                            'embedding': embedding.tolist(),
+                            'image': cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        st.session_state.camera_input_counter += 1
+                        st.success(f"Photo {len(st.session_state.enrollment_captures)}/3 captured.")
+                        st.rerun()
+
+        # Show captured photos
+        if st.session_state.enrollment_captures:
             st.markdown("---")
+            st.subheader("Your Photos")
+            cols = st.columns(len(st.session_state.enrollment_captures))
+            for i, capture in enumerate(st.session_state.enrollment_captures):
+                with cols[i]:
+                    st.image(capture['image'], caption=f"Photo {i+1}", use_container_width=True)
+
+        st.markdown("---")
+        col_left, col_right = st.columns([1, 1])
+        with col_left:
             if st.button("Back", use_container_width=True):
                 st.session_state.step = 'info'
-                st.session_state.camera_active = False
-                if st.session_state.cap:
-                    st.session_state.cap.release()
-                    st.session_state.cap = None
                 st.rerun()
+        with col_right:
+            if len(st.session_state.enrollment_captures) >= 3:
+                if st.button("Continue", type="primary", use_container_width=True):
+                    st.session_state.step = 'save'
+                    st.rerun()
     
     # STEP 4: SAVE & CONFIRM
     elif st.session_state.step == 'save':
@@ -351,10 +361,50 @@ def main():
                 st.rerun()
         with col_right:
             if st.button("Save", type="primary", use_container_width=True):
+                supabase = get_supabase_client(show_error=True)
+                if not supabase:
+                    return
+
+                supabase_bucket_name = st.secrets.get("SUPABASE_BUCKET", "enrollment-photos")
+                supabase_table = st.secrets.get("SUPABASE_TABLE", "enrollments")
+                storage_bucket = supabase.storage.from_(supabase_bucket_name)
+                enrollment_uuid = str(uuid4())
+
+                embeddings_list = [capture['embedding'] for capture in st.session_state.enrollment_captures]
+                photo_urls = []
+
+                # Upload photos to Supabase Storage and collect URLs.
+                try:
+                    for i, capture in enumerate(st.session_state.enrollment_captures):
+                        img_bgr = cv2.cvtColor(capture['image'], cv2.COLOR_RGB2BGR)
+                        success, encoded_image = cv2.imencode(".jpg", img_bgr)
+                        if not success:
+                            raise ValueError("Image encoding failed")
+
+                        photo_path = (
+                            f"{st.session_state.student_id}/{enrollment_uuid}/photo_{i+1}.jpg"
+                        )
+                        storage_bucket.upload(
+                            path=photo_path,
+                            file=encoded_image.tobytes(),
+                            file_options={"content-type": "image/jpeg"},
+                        )
+                        photo_urls.append(get_public_url(storage_bucket, photo_path))
+
+                    payload = {
+                        "student_id": st.session_state.student_id,
+                        "name": st.session_state.student_name,
+                        "photo_urls": photo_urls,
+                        "embeddings": embeddings_list,
+                    }
+                    supabase.table(supabase_table).insert(payload).execute()
+                except Exception as e:
+                    st.error(f"Could not save enrollment online: {e}")
+                    st.info("Please check bucket/table names and Supabase key permissions.")
+                    return
+
                 # Save embeddings
                 embeddings_data = load_embeddings()
-                embeddings_list = [capture['embedding'] for capture in st.session_state.enrollment_captures]
-
                 record_id = build_unique_record_key(
                     embeddings_data["students"], st.session_state.student_id
                 )
@@ -397,8 +447,9 @@ def main():
                 
                 # Clear and go to start
                 st.session_state.enrollment_captures = []
+                st.session_state.camera_input_counter += 1
                 st.session_state.step = 'start'
-                st.success(f"You're enrolled, {st.session_state.student_name}!")
+                st.success(f"You're enrolled, {st.session_state.student_name}! Your data is saved online.")
                 st.balloons()
                 st.rerun()
 
