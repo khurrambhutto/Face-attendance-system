@@ -81,6 +81,24 @@ def get_public_url(storage_bucket, file_path):
     return file_path
 
 
+def resolve_supabase_name_column(supabase, table_name):
+    """
+    Resolve the name column used in the enrollments table.
+    Supports either `name` or `student_name`, and allows explicit override.
+    """
+    override_column = st.secrets.get("SUPABASE_NAME_COLUMN")
+    candidates = [c for c in [override_column, "name", "student_name"] if c]
+
+    for column in candidates:
+        try:
+            supabase.table(table_name).select(column).limit(1).execute()
+            return column
+        except Exception:
+            continue
+
+    return "name"
+
+
 def load_embeddings():
     """Load embeddings from JSON file"""
     embeddings_file = EMBEDDINGS_DIR / "embeddings.json"
@@ -226,9 +244,10 @@ def main():
                     # Also check names already saved online in Supabase.
                     if supabase:
                         try:
-                            response = supabase.table(supabase_table).select("name").execute()
+                            name_column = resolve_supabase_name_column(supabase, supabase_table)
+                            response = supabase.table(supabase_table).select(name_column).execute()
                             for row in (response.data or []):
-                                name_value = row.get("name")
+                                name_value = row.get(name_column)
                                 if name_value:
                                     existing_names.add(normalize_name(name_value))
                         except Exception:
@@ -377,6 +396,7 @@ def main():
 
                 supabase_bucket_name = st.secrets.get("SUPABASE_BUCKET", "enrollment-photos")
                 supabase_table = st.secrets.get("SUPABASE_TABLE", "enrollments")
+                name_column = resolve_supabase_name_column(supabase, supabase_table)
                 storage_bucket = supabase.storage.from_(supabase_bucket_name)
                 enrollment_uuid = str(uuid4())
 
@@ -403,14 +423,16 @@ def main():
 
                     payload = {
                         "student_id": st.session_state.student_id,
-                        "name": st.session_state.student_name,
                         "photo_urls": photo_urls,
                         "embeddings": embeddings_list,
                     }
+                    payload[name_column] = st.session_state.student_name
                     supabase.table(supabase_table).insert(payload).execute()
                 except Exception as e:
                     st.error(f"Could not save enrollment online: {e}")
-                    st.info("Please check bucket/table names and Supabase key permissions.")
+                    st.info(
+                        "Check table/bucket names, permissions, and optional SUPABASE_NAME_COLUMN secret."
+                    )
                     return
 
                 # Save embeddings

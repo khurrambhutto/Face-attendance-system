@@ -207,7 +207,7 @@ def main():
                         st.image(
                             fdata['image'],
                             caption=f"Frame #{fdata['frame_num']}",
-                            use_container_width=True
+                            width="stretch"
                         )
                     with col_info:
                         st.write(f"### {fdata['name']}")
