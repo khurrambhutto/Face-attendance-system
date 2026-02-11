@@ -6,6 +6,7 @@ Simple workflow: Start → Enter Info → Capture → Save
 import streamlit as st
 import cv2
 import json
+import hashlib
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -28,6 +29,8 @@ if 'enrollment_captures' not in st.session_state:
     st.session_state.enrollment_captures = []
 if 'camera_input_counter' not in st.session_state:
     st.session_state.camera_input_counter = 0
+if 'last_photo_signature' not in st.session_state:
+    st.session_state.last_photo_signature = None
 if 'detector' not in st.session_state:
     with st.spinner("Getting things ready..."):
         st.session_state.detector = YuNetDetector()
@@ -237,6 +240,7 @@ def main():
                     else:
                         st.session_state.student_id = normalized_id
                         st.session_state.student_name = normalized_name
+                        st.session_state.last_photo_signature = None
                         st.session_state.step = 'capture'
                         st.rerun()
                 else:
@@ -259,7 +263,7 @@ def main():
             st.info(f"Photos: {len(st.session_state.enrollment_captures)}/3")
         
         st.markdown("---")
-        st.caption("Use your phone/laptop camera, then tap Add Photo.")
+        st.caption("Tap Capture once. Good photos are added automatically.")
 
         camera_file = st.camera_input(
             "Take a photo",
@@ -267,7 +271,9 @@ def main():
         )
 
         if camera_file is not None:
-            file_bytes = np.frombuffer(camera_file.getvalue(), dtype=np.uint8)
+            raw_photo = camera_file.getvalue()
+            photo_signature = hashlib.sha1(raw_photo).hexdigest()
+            file_bytes = np.frombuffer(raw_photo, dtype=np.uint8)
             frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
             if frame is None:
@@ -290,7 +296,9 @@ def main():
 
                 st.image(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
 
-                if st.button("Add Photo", type="primary", use_container_width=True, disabled=not is_good):
+                # Auto-save each newly captured valid photo (no extra Add button).
+                is_new_photo = st.session_state.last_photo_signature != photo_signature
+                if is_good and is_new_photo:
                     embedding = st.session_state.detector.get_face_embedding(frame, faces[0])
                     if embedding is None:
                         st.error("Could not save this photo. Please retake.")
@@ -300,6 +308,7 @@ def main():
                             'image': cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         })
+                        st.session_state.last_photo_signature = photo_signature
                         st.session_state.camera_input_counter += 1
                         st.success(f"Photo {len(st.session_state.enrollment_captures)}/3 captured.")
                         st.rerun()
@@ -317,6 +326,7 @@ def main():
         col_left, col_right = st.columns([1, 1])
         with col_left:
             if st.button("Back", use_container_width=True):
+                st.session_state.last_photo_signature = None
                 st.session_state.step = 'info'
                 st.rerun()
         with col_right:
@@ -447,6 +457,7 @@ def main():
                 
                 # Clear and go to start
                 st.session_state.enrollment_captures = []
+                st.session_state.last_photo_signature = None
                 st.session_state.camera_input_counter += 1
                 st.session_state.step = 'start'
                 st.success(f"You're enrolled, {st.session_state.student_name}! Your data is saved online.")
