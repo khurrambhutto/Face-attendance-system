@@ -196,6 +196,53 @@ class YuNetDetector:
         with open(embeddings_file, 'r') as f:
             return json.load(f)
     
+    def delete_student(self, student_id: str) -> bool:
+        """
+        Delete a student's data from all storage locations:
+        - data/photos/<student_id>/
+        - data/embeddings/embeddings.json
+        - data/metadata/student_info.json
+        
+        Returns True if successful.
+        """
+        import shutil
+        success = True
+        
+        # 1. Delete photos folder
+        photos_dir = Path("data/photos") / student_id
+        if photos_dir.exists():
+            shutil.rmtree(photos_dir)
+        
+        # 2. Remove from embeddings
+        embeddings_file = Path("data/embeddings/embeddings.json")
+        if embeddings_file.exists():
+            try:
+                with open(embeddings_file, 'r') as f:
+                    data = json.load(f)
+                if student_id in data.get("students", {}):
+                    del data["students"][student_id]
+                    with open(embeddings_file, 'w') as f:
+                        json.dump(data, f, indent=2)
+            except Exception as e:
+                print(f"✗ Failed to update embeddings: {e}")
+                success = False
+        
+        # 3. Remove from metadata
+        metadata_file = Path("data/metadata/student_info.json")
+        if metadata_file.exists():
+            try:
+                with open(metadata_file, 'r') as f:
+                    data = json.load(f)
+                if student_id in data:
+                    del data[student_id]
+                    with open(metadata_file, 'w') as f:
+                        json.dump(data, f, indent=2)
+            except Exception as e:
+                print(f"✗ Failed to update metadata: {e}")
+                success = False
+        
+        return success
+    
     @staticmethod
     def cosine_similarity(embedding1, embedding2) -> float:
         """Calculate cosine similarity between two embeddings"""

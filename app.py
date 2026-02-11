@@ -32,11 +32,41 @@ def main():
     st.title("😊 Face Detection & Recognition")
     st.write("Upload a video to detect and recognize faces")
     
-    # Show enrollment status
-    if embeddings:
-        num_students = len(embeddings.get("students", {}))
+    # Show enrollment status with management dropdown
+    if embeddings and embeddings.get("students"):
+        num_students = len(embeddings["students"])
         student_names = [s["name"].strip() for s in embeddings["students"].values()]
         st.success(f"✅ {num_students} enrolled student(s): **{', '.join(student_names)}**")
+        
+        # Load metadata for enrollment dates
+        from pathlib import Path
+        metadata_file = Path("data/metadata/student_info.json")
+        metadata = {}
+        if metadata_file.exists():
+            import json
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        
+        with st.expander("👥 Manage Enrolled Students", expanded=False):
+            for sid, sdata in list(embeddings["students"].items()):
+                col_name, col_id, col_date, col_btn = st.columns([3, 1, 2, 1])
+                with col_name:
+                    st.write(f"**{sdata['name'].strip()}**")
+                with col_id:
+                    st.write(f"ID: {sid}")
+                with col_date:
+                    enrolled_at = metadata.get(sid, {}).get("enrolled_at", "—")
+                    st.write(f"📅 {enrolled_at}")
+                with col_btn:
+                    if st.button("🗑️ Remove", key=f"del_{sid}"):
+                        success = detector.delete_student(sid)
+                        if success:
+                            # Refresh cached embeddings
+                            st.session_state.embeddings = detector.load_embeddings()
+                            st.success(f"Removed {sdata['name'].strip()}")
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to remove student {sid}")
     else:
         st.warning("⚠️ No enrolled students found. Faces will be detected but not recognized. Run `streamlit run enrollment_app.py` to enroll students first.")
     
