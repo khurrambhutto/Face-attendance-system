@@ -181,7 +181,7 @@ def main():
             unsafe_allow_html=True,
         )
         st.markdown("---")
-        if st.button("Start", type="primary", use_container_width=True):
+        if st.button("Start", type="primary", width="stretch"):
             st.session_state.step = 'info'
             st.rerun()
     
@@ -201,11 +201,11 @@ def main():
         st.markdown("---")
         col_left, col_right = st.columns([1, 1])
         with col_left:
-            if st.button("Back", use_container_width=True):
+            if st.button("Back", width="stretch"):
                 st.session_state.step = 'start'
                 st.rerun()
         with col_right:
-            if st.button("Next", type="primary", use_container_width=True):
+            if st.button("Next", type="primary", width="stretch"):
                 normalized_id = student_id.strip()
                 normalized_name = " ".join(student_name.strip().split())
 
@@ -294,7 +294,7 @@ def main():
                 else:
                     st.warning("No face found. Please retake.")
 
-                st.image(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+                st.image(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB), width="stretch")
 
                 # Auto-save each newly captured valid photo (no extra Add button).
                 is_new_photo = st.session_state.last_photo_signature != photo_signature
@@ -320,18 +320,18 @@ def main():
             cols = st.columns(len(st.session_state.enrollment_captures))
             for i, capture in enumerate(st.session_state.enrollment_captures):
                 with cols[i]:
-                    st.image(capture['image'], caption=f"Photo {i+1}", use_container_width=True)
+                    st.image(capture['image'], caption=f"Photo {i+1}", width="stretch")
 
         st.markdown("---")
         col_left, col_right = st.columns([1, 1])
         with col_left:
-            if st.button("Back", use_container_width=True):
+            if st.button("Back", width="stretch"):
                 st.session_state.last_photo_signature = None
                 st.session_state.step = 'info'
                 st.rerun()
         with col_right:
             if len(st.session_state.enrollment_captures) >= 3:
-                if st.button("Continue", type="primary", use_container_width=True):
+                if st.button("Continue", type="primary", width="stretch"):
                     st.session_state.step = 'save'
                     st.rerun()
     
@@ -359,18 +359,18 @@ def main():
         cols = st.columns(len(st.session_state.enrollment_captures))
         for i, capture in enumerate(st.session_state.enrollment_captures):
             with cols[i]:
-                st.image(capture['image'], caption=f"Photo {i+1}", use_container_width=True)
+                st.image(capture['image'], caption=f"Photo {i+1}", width="stretch")
         
         st.markdown("---")
         
         # Save button
         col_left, col_right = st.columns([1, 1])
         with col_left:
-            if st.button("Back", use_container_width=True):
+            if st.button("Back", width="stretch"):
                 st.session_state.step = 'capture'
                 st.rerun()
         with col_right:
-            if st.button("Save", type="primary", use_container_width=True):
+            if st.button("Save", type="primary", width="stretch"):
                 supabase = get_supabase_client(show_error=True)
                 if not supabase:
                     return
