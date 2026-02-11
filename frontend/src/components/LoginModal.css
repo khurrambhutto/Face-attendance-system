@@ -259,3 +259,34 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.mode-toggle {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: var(--border);
+  text-align: center;
+}
+
+.mode-toggle p {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.mode-toggle button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: 0.25rem;
+  transition: color 0.15s;
+}
+
+.mode-toggle button:hover {
+  color: var(--black);
+}

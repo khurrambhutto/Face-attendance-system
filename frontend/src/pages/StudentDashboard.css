@@ -1,0 +1,23 @@
+.student-dashboard {
+  max-width: 100%;
+}
+
+.dashboard-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 3.5rem;
+  font-weight: 400;
+  color: var(--black);
+  margin-bottom: 1.5rem;
+  line-height: 1;
+}
+
+.welcome-message {
+  font-size: 1.25rem;
+  color: var(--text);
+  margin-bottom: 1rem;
+}
+
+.coming-soon {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
