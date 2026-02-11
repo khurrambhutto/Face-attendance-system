@@ -1,0 +1,261 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 10, 10, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: var(--bg);
+  border: var(--border);
+  padding: 2.5rem;
+  max-width: 500px;
+  width: 90%;
+  position: relative;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.modal-close:hover {
+  color: var(--accent);
+}
+
+.role-selection h2,
+.login-form-container h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.role-subtitle {
+  text-align: center;
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+  font-size: 0.875rem;
+}
+
+.role-options {
+  display: grid;
+  gap: 1rem;
+}
+
+.role-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  border: var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.role-btn:hover {
+  background: var(--black);
+  color: var(--bg);
+}
+
+.role-btn.teacher:hover {
+  border-color: var(--accent);
+}
+
+.role-btn.student:hover {
+  border-color: var(--accent);
+}
+
+.role-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.role-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.role-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.role-btn:hover .role-desc {
+  color: rgba(245, 245, 240, 0.7);
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: 1rem;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.back-btn:hover {
+  color: var(--accent);
+}
+
+.login-form-container h2 {
+  margin-bottom: 1.5rem;
+}
+
+.alert {
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  border: 2px solid;
+}
+
+.alert-error {
+  background: rgba(255, 61, 0, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.alert-success {
+  background: rgba(0, 200, 83, 0.1);
+  border-color: #00c853;
+  color: #00c853;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.form-group input {
+  padding: 0.875rem 1rem;
+  border: 2px solid var(--black);
+  background: var(--bg);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  transition: border-color 0.15s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.login-submit-btn {
+  padding: 1rem 2rem;
+  background: var(--black);
+  color: var(--bg);
+  border: var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 0.5rem;
+}
+
+.login-submit-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.login-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.signup-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: var(--border);
+  text-align: center;
+}
+
+.signup-section p {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.signup-btn {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  color: var(--black);
+  border: var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.signup-btn:hover:not(:disabled) {
+  background: var(--black);
+  color: var(--bg);
+}
+
+.signup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

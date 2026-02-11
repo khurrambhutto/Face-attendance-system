@@ -1,11 +1,38 @@
+import { useState, useEffect } from 'react'
 import './App.css'
+import { LoginModal } from './components/LoginModal'
+import { supabase } from './lib/supabase'
+import type { User } from '@supabase/supabase-js'
 
 function App() {
+  const [isLoginOpen, setIsLoginOpen] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: { user: User | null } | null } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: { user: User | null } | null) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+  }
+
   return (
     <div className="app">
       <header className="header">
         <div className="logo">MARK</div>
-        <a href="#" className="login-link">Login</a>
+        {user ? (
+          <button onClick={handleLogout} className="login-link">Logout</button>
+        ) : (
+          <button onClick={() => setIsLoginOpen(true)} className="login-link">Login</button>
+        )}
       </header>
 
       <main className="main">
@@ -34,7 +61,6 @@ function App() {
             <p className="feature-desc">Attendance records generated and synced to your dashboard in seconds.</p>
           </div>
         </section>
-
       </main>
 
       <footer className="footer">
@@ -45,6 +71,8 @@ function App() {
           <a href="#">Contact</a>
         </div>
       </footer>
+
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </div>
   )
 }
