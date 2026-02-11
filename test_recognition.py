@@ -48,20 +48,23 @@ def recognize_face(embedding, embeddings_data, threshold=0.363):
     Returns:
         (student_id, student_name, similarity) or (None, None, 0)
     """
-    best_match = None
+    best_match_key = None
+    best_match_id = None
     best_similarity = 0
     
-    for student_id, student_data in embeddings_data["students"].items():
+    for record_key, student_data in embeddings_data["students"].items():
+        display_student_id = student_data.get("student_id", record_key)
         # Compare against all enrolled embeddings for this student
         for enrolled_embedding in student_data["embeddings"]:
             similarity = cosine_similarity(embedding, enrolled_embedding)
             
             if similarity > best_similarity:
                 best_similarity = similarity
-                best_match = student_id
+                best_match_key = record_key
+                best_match_id = display_student_id
     
     if best_similarity >= threshold:
-        return best_match, embeddings_data["students"][best_match]["name"], best_similarity
+        return best_match_id, embeddings_data["students"][best_match_key]["name"], best_similarity
     
     return None, None, best_similarity
 
@@ -79,8 +82,9 @@ def main():
     
     # Show enrolled students
     print(f"✓ Loaded {len(embeddings_data['students'])} enrolled student(s):")
-    for student_id, student_data in embeddings_data["students"].items():
-        print(f"  - {student_id}: {student_data['name'].strip()} ({student_data['num_embeddings']} photos)")
+    for record_key, student_data in embeddings_data["students"].items():
+        display_student_id = student_data.get("student_id", record_key)
+        print(f"  - {display_student_id}: {student_data['name'].strip()} ({student_data['num_embeddings']} photos)")
     print()
     
     # Initialize detector and recognizer

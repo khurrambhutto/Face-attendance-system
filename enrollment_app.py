@@ -6,7 +6,6 @@ Simple workflow: Start → Enter Info → Capture → Save
 import streamlit as st
 import cv2
 import json
-import numpy as np
 from pathlib import Path
 from datetime import datetime
 from detector import YuNetDetector, init_camera
@@ -14,7 +13,7 @@ from detector import YuNetDetector, init_camera
 
 # Page config
 st.set_page_config(
-    page_title="Face Enrollment",
+    page_title="Quick Face Enroll",
     page_icon="👤",
     layout="centered"
 )
@@ -29,7 +28,7 @@ if 'camera_active' not in st.session_state:
 if 'cap' not in st.session_state:
     st.session_state.cap = None
 if 'detector' not in st.session_state:
-    with st.spinner("Loading models..."):
+    with st.spinner("Getting things ready..."):
         st.session_state.detector = YuNetDetector()
         st.session_state.detector_initialized = st.session_state.detector.initialize()
         st.session_state.sface_initialized = st.session_state.detector.initialize_sface()
@@ -61,13 +60,40 @@ def save_embeddings(data):
         json.dump(data, f, indent=2)
 
 
+def load_metadata():
+    """Load student metadata from JSON file"""
+    metadata_file = METADATA_DIR / "student_info.json"
+    if metadata_file.exists():
+        with open(metadata_file, 'r') as f:
+            return json.load(f)
+    return {}
+
+
+def normalize_name(value):
+    """Normalize names for case-insensitive duplicate checks."""
+    return " ".join(value.strip().lower().split())
+
+
+def build_unique_record_key(existing_data, base_key):
+    """Create a unique key when the same ID is enrolled multiple times."""
+    if base_key not in existing_data:
+        return base_key
+
+    counter = 2
+    while True:
+        candidate = f"{base_key}__{counter}"
+        if candidate not in existing_data:
+            return candidate
+        counter += 1
+
+
 def check_face_quality(frame, face):
     """Check if face meets quality requirements"""
     x, y, w, h = int(face[0]), int(face[1]), int(face[2]), int(face[3])
     
     # Minimum size: 100x100
     if w < 100 or h < 100:
-        return False, "Face too small - move closer"
+        return False, "Move a little closer"
     
     # Check centering
     frame_h, frame_w = frame.shape[:2]
@@ -76,94 +102,135 @@ def check_face_quality(frame, face):
     
     # Face should be in middle 50% of frame
     if not (frame_w * 0.25 < center_x < frame_w * 0.75):
-        return False, "Move face to center horizontally"
+        return False, "Center your face in the frame"
     if not (frame_h * 0.25 < center_y < frame_h * 0.75):
-        return False, "Move face to center vertically"
+        return False, "Center your face in the frame"
     
-    return True, "Good quality"
+    return True, "Great, hold still"
+
+
+def apply_minimal_ui():
+    """Simple visual style for a cleaner, consumer-facing app."""
+    st.markdown(
+        """
+        <style>
+            .block-container {
+                padding-top: 1.5rem;
+                padding-bottom: 2rem;
+                max-width: 760px;
+            }
+            .small-note {
+                color: #6b7280;
+                font-size: 0.95rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def main():
     """Main Streamlit app - Simple linear workflow"""
-    
+    apply_minimal_ui()
+
     # STEP 1: START
     if st.session_state.step == 'start':
-        st.title("👤 Face Enrollment System")
-        st.write("\n")
+        st.title("👤 Quick Face Enroll")
+        st.caption("A fast, simple 3-step flow")
         st.markdown("---")
-        st.markdown("\n### Enroll a new student by capturing their face photos")
-        st.markdown("### and generating SFace embeddings for recognition")
-        st.markdown("\n---")
-        
-        st.write("\n")
-        if st.button("▶️ START ENROLLMENT", type="primary", use_container_width=True):
+        st.markdown("### Ready to enroll?")
+        st.markdown(
+            "<p class='small-note'>You will add your basic info and take 3 photos.</p>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("---")
+        if st.button("Start", type="primary", use_container_width=True):
             st.session_state.step = 'info'
             st.rerun()
     
     # STEP 2: ENTER STUDENT INFO
     elif st.session_state.step == 'info':
-        st.title("👤 Face Enrollment System")
+        st.title("👤 Quick Face Enroll")
         st.markdown("---")
-        
-        st.subheader("Step 1/3: Student Information")
-        
+        st.subheader("Step 1 of 3")
+        st.caption("Enter your details")
+
         col1, col2 = st.columns(2)
         with col1:
-            student_id = st.text_input("Student ID *", key="input_id", placeholder="e.g., 101")
+            student_id = st.text_input("Your ID", key="input_id", placeholder="e.g., 101")
         with col2:
-            student_name = st.text_input("Full Name *", key="input_name", placeholder="e.g., John Doe")
+            student_name = st.text_input("Your Name", key="input_name", placeholder="e.g., John Doe")
         
         st.markdown("---")
         col_left, col_right = st.columns([1, 1])
         with col_left:
-            if st.button("⬅️ Back", use_container_width=True):
+            if st.button("Back", use_container_width=True):
                 st.session_state.step = 'start'
                 st.rerun()
         with col_right:
-            if st.button("Next ➡️", type="primary", use_container_width=True):
-                if student_id and student_name:
-                    st.session_state.student_id = student_id
-                    st.session_state.student_name = student_name
-                    st.session_state.step = 'capture'
-                    st.rerun()
+            if st.button("Next", type="primary", use_container_width=True):
+                normalized_id = student_id.strip()
+                normalized_name = " ".join(student_name.strip().split())
+
+                if normalized_id and normalized_name:
+                    embeddings_data = load_embeddings()
+                    metadata_data = load_metadata()
+
+                    existing_names = set()
+                    for student in embeddings_data.get("students", {}).values():
+                        if isinstance(student, dict) and student.get("name"):
+                            existing_names.add(normalize_name(student["name"]))
+                    for student in metadata_data.values():
+                        if isinstance(student, dict) and student.get("name"):
+                            existing_names.add(normalize_name(student["name"]))
+
+                    if normalize_name(normalized_name) in existing_names:
+                        st.error("This name is already enrolled. You cannot enroll the same name twice.")
+                    else:
+                        st.session_state.student_id = normalized_id
+                        st.session_state.student_name = normalized_name
+                        st.session_state.step = 'capture'
+                        st.rerun()
                 else:
-                    st.error("Please enter both Student ID and Name")
+                    st.error("Please fill in both fields.")
     
     # STEP 3: CAPTURE PHOTOS
     elif st.session_state.step == 'capture':
-        st.title("👤 Face Enrollment System")
+        st.title("👤 Quick Face Enroll")
         st.markdown("---")
+        st.subheader("Step 2 of 3")
+        st.caption("Take 3 clear photos")
         
         # Show student info
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.info(f"**ID:** {st.session_state.student_id}")
+            st.info(f"ID: {st.session_state.student_id}")
         with col2:
-            st.info(f"**Name:** {st.session_state.student_name}")
+            st.info(f"Name: {st.session_state.student_name}")
         with col3:
-            st.info(f"**Photos:** {len(st.session_state.enrollment_captures)}/3")
+            st.info(f"Photos: {len(st.session_state.enrollment_captures)}/3")
         
         st.markdown("---")
         
         # Start camera
         if not st.session_state.camera_active:
-            if st.button("▶️ Start Camera", type="primary", use_container_width=True):
+            if st.button("Start Camera", type="primary", use_container_width=True):
                 cap, backend_name = init_camera()
                 if cap:
                     st.session_state.cap = cap
                     st.session_state.camera_active = True
                     st.rerun()
                 else:
-                    st.error("✗ Could not access camera")
+                    st.error("Camera not available right now. Try again.")
         else:
             col_capture, col_done = st.columns([2, 1])
             
             with col_capture:
-                capture_btn = st.button("📸 Capture Photo", type="primary", use_container_width=True)
+                capture_btn = st.button("Take Photo", type="primary", use_container_width=True)
             
             with col_done:
                 if len(st.session_state.enrollment_captures) >= 3:
-                    if st.button("✅ Done - Save", type="primary", use_container_width=True):
+                    if st.button("Continue", type="primary", use_container_width=True):
                         st.session_state.step = 'save'
                         st.session_state.camera_active = False
                         if st.session_state.cap:
@@ -198,9 +265,9 @@ def main():
                     cv2.putText(display_frame, message, (10, 30),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                     
-                    status_placeholder.info(f"**Status:** {message}")
+                    status_placeholder.info(message)
                 else:
-                    status_placeholder.warning("**Status:** No face detected")
+                    status_placeholder.warning("No face found. Look at the camera.")
                 
                 # Display frame
                 frame_placeholder.image(display_frame, channels="BGR", use_container_width=True)
@@ -219,12 +286,12 @@ def main():
                                 'image': cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             })
-                            st.success(f"✓ Photo {len(st.session_state.enrollment_captures)}/3 captured!")
+                            st.success(f"Photo {len(st.session_state.enrollment_captures)}/3 captured.")
                             st.rerun()
                         else:
-                            st.error("✗ Failed to generate embedding")
+                            st.error("Could not save this photo. Please try again.")
                     else:
-                        st.warning("✗ Face quality not good enough")
+                        st.warning("Please adjust your position and try again.")
                 
                 import time
                 time.sleep(0.01)
@@ -232,7 +299,7 @@ def main():
             # Show captured photos
             if st.session_state.enrollment_captures:
                 st.markdown("---")
-                st.subheader("🖼️ Captured Photos")
+                st.subheader("Your Photos")
                 cols = st.columns(len(st.session_state.enrollment_captures))
                 for i, capture in enumerate(st.session_state.enrollment_captures):
                     with cols[i]:
@@ -240,7 +307,7 @@ def main():
             
             # Back button
             st.markdown("---")
-            if st.button("⬅️ Back", use_container_width=True):
+            if st.button("Back", use_container_width=True):
                 st.session_state.step = 'info'
                 st.session_state.camera_active = False
                 if st.session_state.cap:
@@ -250,25 +317,25 @@ def main():
     
     # STEP 4: SAVE & CONFIRM
     elif st.session_state.step == 'save':
-        st.title("👤 Face Enrollment System")
+        st.title("👤 Quick Face Enroll")
         st.markdown("---")
-        
-        st.subheader("Step 3/3: Save Enrollment")
+        st.subheader("Step 3 of 3")
+        st.caption("Review and save")
         
         # Show summary
-        st.markdown("### Student Information")
+        st.markdown("### Your Details")
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Student ID", st.session_state.student_id)
+            st.metric("ID", st.session_state.student_id)
         with col2:
             st.metric("Name", st.session_state.student_name)
         
-        st.metric("Photos Captured", len(st.session_state.enrollment_captures))
+        st.metric("Photos", len(st.session_state.enrollment_captures))
         
         st.markdown("---")
         
         # Show captured photos
-        st.markdown("### Captured Photos")
+        st.markdown("### Photos")
         cols = st.columns(len(st.session_state.enrollment_captures))
         for i, capture in enumerate(st.session_state.enrollment_captures):
             with cols[i]:
@@ -279,16 +346,21 @@ def main():
         # Save button
         col_left, col_right = st.columns([1, 1])
         with col_left:
-            if st.button("⬅️ Back", use_container_width=True):
+            if st.button("Back", use_container_width=True):
                 st.session_state.step = 'capture'
                 st.rerun()
         with col_right:
-            if st.button("💾 Save Enrollment", type="primary", use_container_width=True):
+            if st.button("Save", type="primary", use_container_width=True):
                 # Save embeddings
                 embeddings_data = load_embeddings()
                 embeddings_list = [capture['embedding'] for capture in st.session_state.enrollment_captures]
-                
-                embeddings_data["students"][st.session_state.student_id] = {
+
+                record_id = build_unique_record_key(
+                    embeddings_data["students"], st.session_state.student_id
+                )
+
+                embeddings_data["students"][record_id] = {
+                    "student_id": st.session_state.student_id,
                     "name": st.session_state.student_name,
                     "embeddings": embeddings_list,
                     "enrolled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -302,8 +374,10 @@ def main():
                 if metadata_file.exists():
                     with open(metadata_file, 'r') as f:
                         metadata_data = json.load(f)
-                
-                metadata_data[st.session_state.student_id] = {
+
+                metadata_record_id = build_unique_record_key(metadata_data, st.session_state.student_id)
+                metadata_data[metadata_record_id] = {
+                    "student_id": st.session_state.student_id,
                     "name": st.session_state.student_name,
                     "enrolled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "num_photos": len(st.session_state.enrollment_captures)
@@ -313,7 +387,7 @@ def main():
                     json.dump(metadata_data, f, indent=2)
                 
                 # Save photos
-                student_photo_dir = PHOTOS_DIR / st.session_state.student_id
+                student_photo_dir = PHOTOS_DIR / record_id
                 student_photo_dir.mkdir(exist_ok=True)
                 
                 for i, capture in enumerate(st.session_state.enrollment_captures):
@@ -324,7 +398,7 @@ def main():
                 # Clear and go to start
                 st.session_state.enrollment_captures = []
                 st.session_state.step = 'start'
-                st.success(f"✓ Enrollment saved for {st.session_state.student_name}!")
+                st.success(f"You're enrolled, {st.session_state.student_name}!")
                 st.balloons()
                 st.rerun()
 
