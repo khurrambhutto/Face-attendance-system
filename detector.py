@@ -353,8 +353,9 @@ class YuNetDetector:
         
         Returns dict with:
             - total_frames, max_faces, avg_faces, total_face_detections
-            - top_frames: top 3 frames with most faces (with name labels drawn)
-            - recognized_students: set of all unique recognized student names
+            - best_frames: dict of student_id -> {frame_num, image, similarity, name}
+            - recognized_students: dict of all unique recognized students with confidence
+            - frames_processed: actual number of frames analyzed
         """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -364,7 +365,8 @@ class YuNetDetector:
         
         frame_data = []
         face_counts = []
-        all_recognized = {}  # student_id -> {name, best_similarity}
+        all_recognized = {}  # student_id -> {name, similarity, frames_appeared}
+        best_frames = {}     # student_id -> {frame_num, annotated_image, similarity, name}
         
         frame_num = 0
         
@@ -376,17 +378,26 @@ class YuNetDetector:
             # Detect AND recognize faces
             annotated_frame, face_count, recognized = self.detect_and_recognize(frame, embeddings_data)
             
-            # Track recognized students
+            # Track recognized students and their best frames
             for r in recognized:
                 sid = r['student_id']
-                if sid not in all_recognized or r['similarity'] > all_recognized[sid]['similarity']:
-                    all_recognized[sid] = {'name': r['name'], 'similarity': r['similarity']}
+                if sid not in all_recognized:
+                    all_recognized[sid] = {'name': r['name'], 'similarity': r['similarity'], 'frames_appeared': 0}
+                all_recognized[sid]['frames_appeared'] += 1
+                
+                # Track best frame (highest similarity) for each student
+                if sid not in best_frames or r['similarity'] > best_frames[sid]['similarity']:
+                    all_recognized[sid]['similarity'] = r['similarity']
+                    best_frames[sid] = {
+                        'frame_num': frame_num,
+                        'annotated_image': annotated_frame.copy(),
+                        'similarity': r['similarity'],
+                        'name': r['name']
+                    }
             
             frame_data.append({
                 'frame_num': frame_num,
                 'face_count': face_count,
-                'annotated_image': annotated_frame.copy(),
-                'recognized': recognized
             })
             face_counts.append(face_count)
             
@@ -398,36 +409,40 @@ class YuNetDetector:
         
         cap.release()
         
+        # Add total processed frame count to each recognized student
+        frames_processed = frame_num
+        for sid in all_recognized:
+            all_recognized[sid]['total_frames'] = frames_processed
+        
         if not face_counts:
             return {
                 'total_frames': 0,
                 'max_faces': 0,
                 'avg_faces': 0.0,
                 'total_face_detections': 0,
-                'top_frames': [],
-                'recognized_students': {}
+                'best_frames': {},
+                'recognized_students': {},
+                'frames_processed': 0
             }
         
-        # Find top 3 frames with most faces
-        sorted_frames = sorted(frame_data, key=lambda x: x['face_count'], reverse=True)[:3]
-        
-        top_frames = []
-        for frame_info in sorted_frames:
-            annotated_rgb = cv2.cvtColor(frame_info['annotated_image'], cv2.COLOR_BGR2RGB)
-            top_frames.append({
-                'frame_num': frame_info['frame_num'],
-                'face_count': frame_info['face_count'],
-                'image': annotated_rgb,
-                'recognized': frame_info['recognized']
-            })
+        # Convert best frames to RGB for Streamlit
+        best_frames_rgb = {}
+        for sid, finfo in best_frames.items():
+            best_frames_rgb[sid] = {
+                'frame_num': finfo['frame_num'],
+                'image': cv2.cvtColor(finfo['annotated_image'], cv2.COLOR_BGR2RGB),
+                'similarity': finfo['similarity'],
+                'name': finfo['name']
+            }
         
         return {
             'total_frames': total_frames,
             'max_faces': max(face_counts),
             'avg_faces': round(sum(face_counts) / len(face_counts), 2),
             'total_face_detections': sum(face_counts),
-            'top_frames': top_frames,
-            'recognized_students': all_recognized
+            'best_frames': best_frames_rgb,
+            'recognized_students': all_recognized,
+            'frames_processed': frames_processed
         }
 
     def process_video(self, video_path: str, progress_callback: Optional[Callable] = None) -> Dict:

@@ -122,6 +122,13 @@ def main():
             progress_bar.progress(1.0)
             status_text.text("✓ Processing complete!")
             
+            # Store results in session state so they persist across reruns
+            st.session_state.results = results
+        
+        # Display results from session state (persists when dropdown changes)
+        if 'results' in st.session_state and st.session_state.results:
+            results = st.session_state.results
+            
             # Display results
             st.header("📊 Results")
             
@@ -136,49 +143,79 @@ def main():
             with col4:
                 st.metric("Total Detections", results['total_face_detections'])
             
-            # Show recognized students summary
+            # Attendance Summary with confidence scores
             recognized = results.get('recognized_students', {})
+            frames_processed = results.get('frames_processed', results['total_frames'])
+            
+            st.header("🎓 Attendance Summary")
+            
             if recognized:
-                st.header("🎓 Recognized Students")
-                for sid, info in recognized.items():
-                    st.write(f"✅ **{info['name']}** (ID: {sid}) — best match: {info['similarity']:.0%}")
+                st.write(f"**{len(recognized)}** student(s) recognized across **{frames_processed}** frames:")
+                st.write("")
+                
+                for sid, info in sorted(recognized.items(), key=lambda x: x[1]['frames_appeared'], reverse=True):
+                    appeared = info['frames_appeared']
+                    confidence = appeared / frames_processed if frames_processed > 0 else 0
+                    
+                    col_status, col_name, col_conf, col_bar = st.columns([0.5, 2, 1.5, 3])
+                    with col_status:
+                        st.write("✅" if confidence >= 0.02 else "⚠️")
+                    with col_name:
+                        st.write(f"**{info['name']}** (ID: {sid})")
+                    with col_conf:
+                        st.write(f"{appeared}/{frames_processed} frames ({confidence:.1%})")
+                    with col_bar:
+                        st.progress(min(confidence * 5, 1.0))  # Scale up for visibility (20% fills bar)
+                
+                st.divider()
+                
+                # Show enrolled but NOT recognized students
+                if embeddings and embeddings.get("students"):
+                    absent = []
+                    for sid, sdata in embeddings["students"].items():
+                        if sid not in recognized:
+                            absent.append(sdata["name"].strip())
+                    if absent:
+                        st.write("**❌ Not detected (absent):**")
+                        for name in absent:
+                            st.write(f"  • {name}")
             elif embeddings:
                 st.info("No enrolled students were recognized in this video.")
             
-            # Top 3 frames
-            st.header("🖼️ Top 3 Frames with Most Faces")
+            # Camera tip
+            st.info("💡 **Tip for large classes:** Slowly pan/sweep the camera across the room during recording. "
+                    "The system aggregates faces across ALL frames — each student only needs to appear in a few frames to be marked present.")
             
-            if results['top_frames']:
-                for i, frame_data in enumerate(results['top_frames']):
-                    with st.container():
-                        col_frame, col_info = st.columns([3, 1])
-                        with col_frame:
-                            st.image(
-                                frame_data['image'],
-                                caption=f"Frame #{frame_data['frame_num']}",
-                                use_container_width=True
-                            )
-                        with col_info:
-                            st.metric(
-                                f"Frame #{i+1}",
-                                f"{frame_data['face_count']} faces",
-                                label_visibility="visible"
-                            )
-                            st.write(f"**Frame Number:** {frame_data['frame_num']}")
-                            st.write(f"**Faces Detected:** {frame_data['face_count']}")
-                            # Show who was recognized in this frame
-                            if frame_data.get('recognized'):
-                                st.write("**Recognized:**")
-                                for r in frame_data['recognized']:
-                                    st.write(f"  • {r['name']} ({r['similarity']:.0%})")
-                    st.divider()
+            # Best Frame Per Student (with dropdown selector)
+            best_frames = results.get('best_frames', {})
+            
+            if best_frames:
+                st.header("🖼️ Best Frame Per Student")
+                
+                # Build dropdown options: "Name (ID: X)"
+                options = {sid: f"{fdata['name']} (ID: {sid})" for sid, fdata in best_frames.items()}
+                selected_sid = st.selectbox(
+                    "Select a student to view their best detected frame:",
+                    options.keys(),
+                    format_func=lambda x: options[x]
+                )
+                
+                if selected_sid:
+                    fdata = best_frames[selected_sid]
+                    col_frame, col_info = st.columns([3, 1])
+                    with col_frame:
+                        st.image(
+                            fdata['image'],
+                            caption=f"Frame #{fdata['frame_num']}",
+                            use_container_width=True
+                        )
+                    with col_info:
+                        st.write(f"### {fdata['name']}")
+                        st.write(f"**Student ID:** {selected_sid}")
+                        st.write(f"**Best Match:** {fdata['similarity']:.0%}")
+                        st.write(f"**Frame:** #{fdata['frame_num']}")
             else:
-                st.info("No faces detected in the video")
-        
-        # Clean up temp file
-        import os
-        if os.path.exists(temp_video_path):
-            os.remove(temp_video_path)
+                st.info("No faces were recognized in the video.")
     
     else:
         st.info("👆 Upload a video file to begin face detection & recognition")
