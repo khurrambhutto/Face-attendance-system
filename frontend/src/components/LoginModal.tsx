@@ -54,12 +54,12 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       if (signInError) throw signInError
 
       if (data.user) {
-        const { data: profile } = await supabase
+        const { data: profiles } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
-          .single()
 
+        const profile = profiles?.[0]
         if (profile && profile.role !== role) {
           await supabase.auth.signOut()
           throw new Error(`This account is registered as a ${profile.role}, not a ${role}`)
