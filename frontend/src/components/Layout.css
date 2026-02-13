@@ -27,6 +27,13 @@
   line-height: 1;
 }
 
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
 .logout-btn {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.875rem;
@@ -43,6 +50,26 @@
 }
 
 .logout-btn:hover {
+  background: var(--black);
+  color: var(--bg);
+}
+
+.register-face-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--black);
+  text-decoration: none;
+  padding: 0.875rem 2rem;
+  border: var(--border);
+  background: var(--bg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.register-face-btn:hover {
   background: var(--black);
   color: var(--bg);
 }

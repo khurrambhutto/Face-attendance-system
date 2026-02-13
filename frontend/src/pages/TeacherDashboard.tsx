@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import { AttendanceModal } from '../components/AttendanceModal'
 import './TeacherDashboard.css'
 
 interface Course {
@@ -34,6 +35,8 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set())
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false)
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCourses()
@@ -133,6 +136,16 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
     })
   }
 
+  const openAttendanceModal = (courseId: string) => {
+    setSelectedCourseId(courseId)
+    setAttendanceModalOpen(true)
+  }
+
+  const closeAttendanceModal = () => {
+    setAttendanceModalOpen(false)
+    setSelectedCourseId(null)
+  }
+
   return (
     <div className="teacher-dashboard">
       <h1 className="dashboard-title">My Courses</h1>
@@ -211,14 +224,24 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
                     {course.course_enrollments?.length || 0} students
                   </span>
                 </div>
-                {(course.course_enrollments && course.course_enrollments.length > 0) && (
+                
+                <div className="course-actions">
                   <button
-                    onClick={() => toggleExpandCourse(course.id)}
-                    className="toggle-students-btn"
+                    onClick={() => openAttendanceModal(course.id)}
+                    className="attendance-btn"
                   >
-                    {expandedCourses.has(course.id) ? 'Hide Students' : 'View Students'}
+                    Take Attendance
                   </button>
-                )}
+                  {(course.course_enrollments && course.course_enrollments.length > 0) && (
+                    <button
+                      onClick={() => toggleExpandCourse(course.id)}
+                      className="toggle-students-btn"
+                    >
+                      {expandedCourses.has(course.id) ? 'Hide' : 'Students'}
+                    </button>
+                  )}
+                </div>
+                
                 {expandedCourses.has(course.id) && course.course_enrollments && course.course_enrollments.length > 0 && (
                   <div className="enrolled-students">
                     <h4>Enrolled Students</h4>
@@ -244,6 +267,15 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
           </div>
         )}
       </section>
+
+      {selectedCourseId && (
+        <AttendanceModal
+          isOpen={attendanceModalOpen}
+          onClose={closeAttendanceModal}
+          courseId={selectedCourseId}
+          teacherId={user.id}
+        />
+      )}
     </div>
   )
 }

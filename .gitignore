@@ -71,8 +71,12 @@ temp/
 captured_frame_*.jpg
 temp_video.*
 
-# ngrok
-ngrok
+# Cloudflare
+*.deb
+cloudflared
+
+# Deployment scripts (moved to old/)
+deploy_*.sh
 
 # Environment variables
 .env

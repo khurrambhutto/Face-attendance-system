@@ -5,6 +5,7 @@ import { LoginModal } from './components/LoginModal'
 import { Layout } from './components/Layout'
 import { TeacherDashboard } from './pages/TeacherDashboard'
 import { StudentDashboard } from './pages/StudentDashboard'
+import { Settings } from './pages/Settings'
 import { supabase } from './lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -93,12 +94,13 @@ function App() {
       <Route path="/student-dashboard" element={
         user ? (
           <Layout>
-            <StudentDashboard />
+            <StudentDashboard user={user} />
           </Layout>
         ) : (
           <Navigate to="/" />
         )
       } />
+      <Route path="/settings" element={<Settings />} />
     </Routes>
   )
 }

@@ -4,9 +4,10 @@ import './Layout.css'
 
 interface LayoutProps {
   children: React.ReactNode
+  headerAction?: React.ReactNode
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, headerAction }: LayoutProps) {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -18,7 +19,10 @@ export function Layout({ children }: LayoutProps) {
     <div className="layout">
       <header className="layout-header">
         <div className="logo">MARK</div>
-        <button onClick={handleLogout} className="logout-btn">Logout</button>
+        <div className="header-actions">
+          {headerAction}
+          <button onClick={handleLogout} className="logout-btn">Logout</button>
+        </div>
       </header>
       <main className="layout-main">
         {children}
