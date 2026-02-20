@@ -16,7 +16,7 @@ interface Course {
 interface Enrollment {
   id: string
   course_id: string
-  student_id: string
+  user_id: string
   enrolled_at: string
   status: string
   profiles?: { email: string | null }
@@ -53,7 +53,7 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
           course_enrollments(
             enrolled_at,
             status,
-            student_id
+            user_id
           )
         `)
         .eq('teacher_id', user.id)
@@ -224,7 +224,7 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
                     {course.course_enrollments?.length || 0} students
                   </span>
                 </div>
-                
+
                 <div className="course-actions">
                   <button
                     onClick={() => openAttendanceModal(course.id)}
@@ -241,7 +241,7 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
                     </button>
                   )}
                 </div>
-                
+
                 {expandedCourses.has(course.id) && course.course_enrollments && course.course_enrollments.length > 0 && (
                   <div className="enrolled-students">
                     <h4>Enrolled Students</h4>
@@ -249,7 +249,7 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
                       {course.course_enrollments.map((enrollment) => (
                         <li key={enrollment.id} className="student-item">
                           <div className="student-info">
-                            <span className="student-email">{enrollment.student_id}</span>
+                            <span className="student-email">{enrollment.user_id}</span>
                             <span className="enrollment-date">
                               Enrolled: {new Date(enrollment.enrolled_at).toLocaleDateString()}
                             </span>

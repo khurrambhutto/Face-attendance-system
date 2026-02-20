@@ -23,15 +23,17 @@ class SupabaseService:
     def is_initialized(self) -> bool:
         return self._initialized
 
+    # ── Profile / Enrollment Methods ──────────────────────────────
+
     def check_enrollment_exists(
         self, student_id: str, student_name: str
     ) -> Dict[str, Any]:
+        """Check if a student_id or name is already taken in profiles."""
         result = {"exists": False, "duplicate_id": False, "duplicate_name": False}
 
-        normalized_name = " ".join(student_name.strip().lower().split())
-
+        # Check student_id
         id_response = (
-            self.client.table("enrollments")
+            self.client.table("profiles")
             .select("id")
             .eq("student_id", student_id.strip())
             .execute()
@@ -41,11 +43,16 @@ class SupabaseService:
             result["duplicate_id"] = True
             return result
 
-        all_enrollments = (
-            self.client.table("enrollments").select("student_name").execute()
+        # Check name (normalized comparison)
+        normalized_name = " ".join(student_name.strip().lower().split())
+        all_profiles = (
+            self.client.table("profiles")
+            .select("name")
+            .not_.is_("name", "null")
+            .execute()
         )
-        for enrollment in all_enrollments.data or []:
-            existing_name = enrollment.get("student_name", "")
+        for profile in all_profiles.data or []:
+            existing_name = profile.get("name", "")
             if existing_name:
                 normalized_existing = " ".join(existing_name.strip().lower().split())
                 if normalized_existing == normalized_name:
@@ -62,38 +69,43 @@ class SupabaseService:
         student_name: str,
         embeddings: List[List[float]],
         photo_urls: List[str],
-    ) -> Optional[UUID]:
+    ) -> bool:
+        """Update a profile row with face enrollment data."""
         try:
-            profile_check = (
-                self.client.table("profiles").select("id").eq("id", user_id).execute()
-            )
-            user_id_to_insert = user_id if profile_check.data else None
+            if not user_id or not user_id.strip():
+                print("Failed to create enrollment: user_id is required")
+                return False
 
             response = (
-                self.client.table("enrollments")
-                .insert(
+                self.client.table("profiles")
+                .update(
                     {
-                        "user_id": user_id_to_insert,
                         "student_id": student_id.strip(),
-                        "student_name": student_name.strip(),
+                        "name": student_name.strip(),
                         "embeddings": embeddings,
                         "photo_urls": photo_urls,
-                        "status": "active",
+                        "enrollment_status": "active",
                     }
                 )
+                .eq("id", user_id.strip())
                 .execute()
             )
 
             if response.data:
-                return UUID(response.data[0]["id"])
-            return None
+                return True
+            return False
         except Exception as e:
-            print(f"Failed to create enrollment: {e}")
-            return None
+            print(f"[ERROR] Failed to create enrollment: {e}")
+            print(f"[DEBUG] user_id={user_id}, student_id={student_id}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def get_enrollments(self, course_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get enrolled students (profiles with active enrollment_status)."""
         try:
             if course_id:
+                # Get user_ids enrolled in this course
                 course_students = (
                     self.client.table("course_enrollments")
                     .select("user_id")
@@ -106,23 +118,24 @@ class SupabaseService:
                 if not user_ids:
                     return []
 
-                enrollments = []
+                profiles = []
                 for uid in user_ids:
                     response = (
-                        self.client.table("enrollments")
+                        self.client.table("profiles")
                         .select("*")
-                        .eq("user_id", uid)
-                        .eq("status", "active")
+                        .eq("id", uid)
+                        .eq("enrollment_status", "active")
                         .execute()
                     )
                     if response.data:
-                        enrollments.extend(response.data)
-                return enrollments
+                        profiles.extend(response.data)
+                return profiles
             else:
                 response = (
-                    self.client.table("enrollments")
+                    self.client.table("profiles")
                     .select("*")
-                    .eq("status", "active")
+                    .eq("enrollment_status", "active")
+                    .eq("role", "student")
                     .order("created_at", desc=True)
                     .execute()
                 )
@@ -131,12 +144,13 @@ class SupabaseService:
             print(f"Failed to get enrollments: {e}")
             return []
 
-    def get_enrollment(self, enrollment_id: str) -> Optional[Dict[str, Any]]:
+    def get_enrollment(self, profile_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single enrolled student profile."""
         try:
             response = (
-                self.client.table("enrollments")
+                self.client.table("profiles")
                 .select("*")
-                .eq("id", enrollment_id)
+                .eq("id", profile_id)
                 .single()
                 .execute()
             )
@@ -146,12 +160,13 @@ class SupabaseService:
             return None
 
     def get_enrollment_by_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get enrollment data for a specific user."""
         try:
             response = (
-                self.client.table("enrollments")
+                self.client.table("profiles")
                 .select("*")
-                .eq("user_id", user_id)
-                .eq("status", "active")
+                .eq("id", user_id)
+                .eq("enrollment_status", "active")
                 .single()
                 .execute()
             )
@@ -159,11 +174,16 @@ class SupabaseService:
         except Exception:
             return None
 
-    def delete_enrollment(self, enrollment_id: str) -> bool:
+    def delete_enrollment(self, profile_id: str) -> bool:
+        """Soft-delete enrollment by resetting face data."""
         try:
-            self.client.table("enrollments").update({"status": "deleted"}).eq(
-                "id", enrollment_id
-            ).execute()
+            self.client.table("profiles").update(
+                {
+                    "enrollment_status": "deleted",
+                    "embeddings": None,
+                    "photo_urls": None,
+                }
+            ).eq("id", profile_id).execute()
             return True
         except Exception as e:
             print(f"Failed to delete enrollment: {e}")
@@ -172,10 +192,11 @@ class SupabaseService:
     def get_enrolled_students_for_recognition(
         self, course_id: str
     ) -> List[Dict[str, Any]]:
+        """Get students enrolled in a course with their face embeddings."""
         try:
             course_enrollments = (
                 self.client.table("course_enrollments")
-                .select("user_id, student_id")
+                .select("user_id")
                 .eq("course_id", course_id)
                 .eq("status", "active")
                 .execute()
@@ -185,15 +206,15 @@ class SupabaseService:
             for ce in course_enrollments.data or []:
                 user_id = ce.get("user_id")
                 if user_id:
-                    enrollment = self.get_enrollment_by_user(user_id)
-                    if enrollment:
+                    profile = self.get_enrollment_by_user(user_id)
+                    if profile:
                         students.append(
                             {
-                                "id": enrollment["id"],
-                                "user_id": enrollment.get("user_id"),
-                                "student_id": enrollment.get("student_id"),
-                                "student_name": enrollment.get("student_name"),
-                                "embeddings": enrollment.get("embeddings", []),
+                                "id": profile["id"],
+                                "user_id": profile["id"],
+                                "student_id": profile.get("student_id"),
+                                "student_name": profile.get("name"),
+                                "embeddings": profile.get("embeddings", []),
                             }
                         )
 
@@ -201,6 +222,8 @@ class SupabaseService:
         except Exception as e:
             print(f"Failed to get enrolled students: {e}")
             return []
+
+    # ── Attendance Methods ────────────────────────────────────────
 
     def create_attendance_session(
         self,
@@ -239,7 +262,6 @@ class SupabaseService:
     def create_attendance_record(
         self,
         session_id: str,
-        enrollment_id: Optional[str],
         user_id: Optional[str],
         student_name: str,
         student_id: str,
@@ -253,7 +275,6 @@ class SupabaseService:
             self.client.table("attendance_records").insert(
                 {
                     "session_id": session_id,
-                    "enrollment_id": enrollment_id,
                     "user_id": user_id,
                     "student_name": student_name,
                     "student_id": student_id,
@@ -321,6 +342,8 @@ class SupabaseService:
         except Exception as e:
             print(f"Failed to get attendance history: {e}")
             return []
+
+    # ── Storage Methods ───────────────────────────────────────────
 
     def upload_photo(
         self, file_path: str, file_content: bytes, content_type: str = "image/jpeg"

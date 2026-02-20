@@ -75,8 +75,6 @@ async def register_enrollment(
     embeddings_list = []
     photo_urls = []
 
-    enrollment_uuid = str(uuid_lib.uuid4())
-
     for i, photo in enumerate(photos):
         contents = await photo.read()
 
@@ -110,7 +108,8 @@ async def register_enrollment(
 
         embeddings_list.append(embedding.tolist()[0])
 
-        file_path = f"{student_id.strip()}/{enrollment_uuid}/photo_{i + 1}.jpg"
+        # Upload photo to storage
+        file_path = f"{student_id.strip()}/{user_id.strip()}/photo_{i + 1}.jpg"
         photo_url = supabase.upload_photo(file_path, contents, "image/jpeg")
 
         if photo_url:
@@ -120,7 +119,8 @@ async def register_enrollment(
                 status_code=500, detail=f"Failed to upload photo {i + 1}"
             )
 
-    enrollment_id = supabase.create_enrollment(
+    # Update the user's profile with enrollment data
+    success = supabase.create_enrollment(
         user_id=user_id.strip(),
         student_id=student_id.strip(),
         student_name=student_name.strip(),
@@ -128,10 +128,10 @@ async def register_enrollment(
         photo_urls=photo_urls,
     )
 
-    if enrollment_id:
+    if success:
         return RegisterEnrollmentResponse(
             success=True,
-            enrollment_id=enrollment_id,
+            enrollment_id=None,
             message=f"Successfully enrolled {student_name}",
         )
     else:

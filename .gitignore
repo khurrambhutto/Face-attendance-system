@@ -108,3 +108,6 @@ dmypy.json
 
 # Node modules (if any frontend code)
 node_modules/
+
+# Backend local data (videos, frames)
+backend/local_data/

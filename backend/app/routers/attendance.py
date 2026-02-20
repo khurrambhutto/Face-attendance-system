@@ -142,13 +142,13 @@ async def process_attendance(
                 session_id_str, student["student_id"], bf["image"], frames_dir
             )
 
+        # Find the enrolled student to get user_id
         enrollment = next(
             (s for s in enrolled_students if s.get("id") == student["student_id"]), None
         )
 
         supabase.create_attendance_record(
             session_id=session_id_str,
-            enrollment_id=student["student_id"],
             user_id=enrollment.get("user_id") if enrollment else None,
             student_name=student["student_name"],
             student_id=student["student_id"],
@@ -167,7 +167,6 @@ async def process_attendance(
 
         supabase.create_attendance_record(
             session_id=session_id_str,
-            enrollment_id=student.get("student_id"),
             user_id=enrollment.get("user_id") if enrollment else None,
             student_name=student.get("student_name", ""),
             student_id=student.get("student_id", ""),
@@ -218,9 +217,6 @@ async def get_attendance_session(session_id: str):
             AttendanceRecordResponse(
                 id=UUID(record["id"]),
                 session_id=UUID(record["session_id"]),
-                enrollment_id=UUID(record["enrollment_id"])
-                if record.get("enrollment_id")
-                else None,
                 user_id=UUID(record["user_id"]) if record.get("user_id") else None,
                 student_name=record.get("student_name", ""),
                 student_id=record.get("student_id", ""),
