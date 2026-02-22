@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, type UserRole } from '../lib/supabase'
 import './LoginModal.css'
@@ -6,12 +6,13 @@ import './LoginModal.css'
 interface LoginModalProps {
   isOpen: boolean
   onClose: () => void
+  initialMode?: 'login' | 'signup'
 }
 
-export function LoginModal({ isOpen, onClose }: LoginModalProps) {
+export function LoginModal({ isOpen, onClose, initialMode = 'login' }: LoginModalProps) {
   const navigate = useNavigate()
   const [step, setStep] = useState<'select' | 'form'>('select')
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [mode, setMode] = useState<'login' | 'signup'>(initialMode)
   const [role, setRole] = useState<UserRole | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -19,12 +20,25 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Reset state when modal opens or mode changes
+  useEffect(() => {
+    if (isOpen) {
+      setStep('select')
+      setMode(initialMode)
+      setRole(null)
+      setName('')
+      setEmail('')
+      setPassword('')
+      setError(null)
+    }
+  }, [isOpen, initialMode])
+
   if (!isOpen) return null
 
   const handleRoleSelect = (selectedRole: UserRole) => {
     setRole(selectedRole)
     setStep('form')
-    setMode('login')
+    setMode(initialMode)
     setError(null)
   }
 
@@ -99,16 +113,17 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       if (signUpError) throw signUpError
 
       if (data.user) {
-        await supabase.from('profiles').insert([
-          {
-            id: data.user.id,
-            email: data.user.email,
+        // Trigger already created the profile row, so we UPDATE it
+        await supabase.from('profiles')
+          .update({
             name: name.trim(),
             role: role,
-          },
-        ])
+          })
+          .eq('id', data.user.id)
 
-        setError('Check your email to confirm your account!')
+        // Auto-login and redirect
+        onClose()
+        navigate(role === 'teacher' ? '/teacher-dashboard' : '/student-dashboard')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed')
@@ -121,13 +136,13 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>×</button>
-        
+
         {step === 'select' ? (
           <div className="role-selection">
-            <h2>Login As</h2>
+            <h2>{initialMode === 'signup' ? 'Sign Up As' : 'Login As'}</h2>
             <p className="role-subtitle">Select your account type</p>
             <div className="role-options">
-              <button 
+              <button
                 className="role-btn teacher"
                 onClick={() => handleRoleSelect('teacher')}
               >
@@ -135,7 +150,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 <span className="role-label">Teacher</span>
                 <span className="role-desc">Manage classes & attendance</span>
               </button>
-              <button 
+              <button
                 className="role-btn student"
                 onClick={() => handleRoleSelect('student')}
               >
