@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './StudentDashboard.css'
 import { FaceRegistrationModal } from '../components/FaceRegistrationModal'
 import type { User } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
 
 interface StudentDashboardProps {
   user: User
@@ -9,6 +10,23 @@ interface StudentDashboardProps {
 
 export function StudentDashboard({ user }: StudentDashboardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [studentName, setStudentName] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchStudentName = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', user.id)
+        .single()
+
+      if (data?.name) {
+        setStudentName(data.name)
+      }
+    }
+
+    fetchStudentName()
+  }, [user.id])
 
   return (
     <div className="student-dashboard">
@@ -21,7 +39,9 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
           Register Face
         </button>
       </div>
-      <p className="welcome-message">Welcome!</p>
+      <p className="welcome-message">
+        Welcome{studentName ? `, ${studentName}` : ''}!
+      </p>
       <p className="coming-soon">Course enrollment feature coming soon...</p>
 
       <FaceRegistrationModal
