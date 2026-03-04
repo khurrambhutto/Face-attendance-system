@@ -24,11 +24,6 @@
   margin-bottom: 1rem;
 }
 
-.coming-soon {
-  color: var(--text-muted);
-  font-size: 1rem;
-}
-
 .register-face-btn {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.875rem;
@@ -47,4 +42,137 @@
 .register-face-btn:hover {
   background: var(--black);
   color: var(--bg);
+}
+
+.section-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.75rem;
+  letter-spacing: 0.02em;
+  margin: 2rem 0 1.5rem;
+  text-transform: uppercase;
+  color: var(--black);
+}
+
+.alert {
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  border: 2px solid;
+}
+
+.alert-error {
+  background: rgba(255, 61, 0, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.alert-success {
+  background: rgba(0, 200, 83, 0.1);
+  border-color: #00c853;
+  color: #00c853;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  border: 2px dashed var(--black);
+  color: var(--text-muted);
+}
+
+.courses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.course-card {
+  border: var(--border);
+  background: var(--bg);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.course-name {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.6rem;
+  line-height: 1;
+  margin: 0;
+  color: var(--black);
+}
+
+.course-description {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.course-description.muted {
+  color: var(--text-muted);
+}
+
+.course-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(10, 10, 10, 0.1);
+}
+
+.course-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.enroll-btn {
+  padding: 0.65rem 1rem;
+  background: var(--black);
+  color: var(--bg);
+  border: 2px solid var(--black);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.enroll-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.enroll-btn:disabled {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: rgba(10, 10, 10, 0.25);
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .dashboard-title {
+    font-size: 2.5rem;
+  }
+
+  .courses-grid {
+    grid-template-columns: 1fr;
+  }
 }
