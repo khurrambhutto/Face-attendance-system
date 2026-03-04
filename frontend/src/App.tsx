@@ -7,7 +7,10 @@ import { TeacherDashboard } from './pages/TeacherDashboard'
 import { StudentDashboard } from './pages/StudentDashboard'
 import { Settings } from './pages/Settings'
 import { supabase } from './lib/supabase'
+import { initApiUrlFromParams } from './lib/api'
 import type { User } from '@supabase/supabase-js'
+
+initApiUrlFromParams()
 
 function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false)
