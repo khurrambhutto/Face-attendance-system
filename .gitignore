@@ -111,3 +111,4 @@ node_modules/
 
 # Backend local data (videos, frames)
 backend/local_data/
+backend/models/*.onnx
