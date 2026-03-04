@@ -46,9 +46,9 @@ ENV/
 data/
 !data/.gitkeep
 
-# Models - Auto-downloaded (optional, can be ignored)
-models/
-!models/.gitkeep
+# Models - Auto-downloaded ML weights at repo root (optional, can be ignored)
+/models/
+!/models/.gitkeep
 
 # Logs
 *.log
