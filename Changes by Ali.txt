@@ -1,0 +1,2 @@
+Made the lib folder and its files, because it was not in the main branch
+Path: frontend/src/lib

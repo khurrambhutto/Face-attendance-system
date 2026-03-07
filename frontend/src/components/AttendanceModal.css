@@ -61,6 +61,53 @@
   padding: 40px 20px;
 }
 
+/* ── Tab Selector ── */
+
+.input-mode-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: none;
+  background: #f9fafb;
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:first-child {
+  border-right: 2px solid #e5e7eb;
+}
+
+.tab-btn.active {
+  background: #6366f1;
+  color: white;
+}
+
+.tab-btn:not(.active):hover {
+  background: #eef2ff;
+  color: #6366f1;
+}
+
+.tab-icon {
+  font-size: 18px;
+}
+
+/* ── Upload Area (existing) ── */
+
 .upload-area {
   margin-bottom: 24px;
 }
@@ -140,6 +187,191 @@
   margin-bottom: 4px;
 }
 
+/* ── Recording Section ── */
+
+.record-section {
+  margin-bottom: 24px;
+}
+
+.record-camera-container {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f0f1a;
+  margin-bottom: 16px;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.record-video-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.record-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.record-placeholder-icon {
+  font-size: 48px;
+}
+
+.recording-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.recording-timer {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  padding: 8px 14px;
+  border-radius: 20px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.recording-time {
+  letter-spacing: 0.05em;
+}
+
+/* ── Recording Controls ── */
+
+.record-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.record-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.record-btn .btn-icon {
+  font-size: 16px;
+}
+
+.start-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.start-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.stop-btn {
+  background: #1f2937;
+  color: white;
+}
+
+.stop-btn:hover {
+  background: #111827;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(31, 41, 55, 0.3);
+}
+
+.rerecord-btn {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.rerecord-btn:hover {
+  background: #e5e7eb;
+}
+
+/* ── Recorded Preview ── */
+
+.recorded-preview {
+  margin-bottom: 16px;
+}
+
+.recorded-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.recorded-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #059669;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recorded-duration {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.recorded-video {
+  width: 100%;
+  border-radius: 12px;
+  background: #0f0f1a;
+  max-height: 300px;
+}
+
+.recorded-info {
+  margin-top: 8px;
+  text-align: right;
+}
+
+/* ── Action Buttons ── */
+
 .modal-actions {
   display: flex;
   gap: 12px;
@@ -184,6 +416,8 @@
   background: #e0e0e0;
 }
 
+/* ── Processing ── */
+
 .processing-animation {
   margin-bottom: 24px;
 }
@@ -223,6 +457,8 @@
   font-size: 14px;
   color: #666;
 }
+
+/* ── Results ── */
 
 .results-date {
   color: #666;
@@ -322,6 +558,8 @@
   background: #ef4444;
   color: white;
 }
+
+/* ── Error ── */
 
 .error-icon {
   font-size: 48px;
