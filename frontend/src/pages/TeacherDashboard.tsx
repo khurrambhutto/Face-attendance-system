@@ -19,7 +19,7 @@ interface Enrollment {
   user_id: string
   enrolled_at: string
   status: string
-  profiles?: { email: string | null }
+  profiles?: { name: string | null; student_id: string | null }
 }
 
 interface TeacherDashboardProps {
@@ -51,9 +51,11 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
         .select(`
           *,
           course_enrollments(
+            id,
             enrolled_at,
             status,
-            user_id
+            user_id,
+            profiles(name, student_id)
           )
         `)
         .eq('teacher_id', user.id)
@@ -249,7 +251,7 @@ export function TeacherDashboard({ user }: TeacherDashboardProps) {
                       {course.course_enrollments.map((enrollment) => (
                         <li key={enrollment.id} className="student-item">
                           <div className="student-info">
-                            <span className="student-email">{enrollment.user_id}</span>
+                            <span className="student-email">{enrollment.profiles?.name || enrollment.user_id}</span>
                             <span className="enrollment-date">
                               Enrolled: {new Date(enrollment.enrolled_at).toLocaleDateString()}
                             </span>

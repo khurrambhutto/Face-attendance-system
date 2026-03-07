@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import './AttendanceModal.css'
 import { api, type AttendanceRecord, type AttendanceSession } from '../lib/api'
+import { supabase } from '../lib/supabase'
 
 interface AttendanceModalProps {
   isOpen: boolean
@@ -10,15 +11,168 @@ interface AttendanceModalProps {
 }
 
 type Step = 'upload' | 'processing' | 'results' | 'error'
+type InputMode = 'upload' | 'record'
 
 export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: AttendanceModalProps) {
   const [step, setStep] = useState<Step>('upload')
+  const [inputMode, setInputMode] = useState<InputMode>('upload')
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [error, setError] = useState<string>('')
   const [session, setSession] = useState<AttendanceSession | null>(null)
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Recording state
+  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
+  const [recordedUrl, setRecordedUrl] = useState<string>('')
+  const [recordingTime, setRecordingTime] = useState(0)
+  const videoPreviewRef = useRef<HTMLVideoElement>(null)
+  const recordedVideoRef = useRef<HTMLVideoElement>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Clean up camera stream and timer on unmount or modal close
+  useEffect(() => {
+    return () => {
+      stopCamera()
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
+
+  // Attach stream to video element when stream changes
+  useEffect(() => {
+    if (videoPreviewRef.current && stream) {
+      videoPreviewRef.current.srcObject = stream
+    }
+  }, [stream])
+
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+      setStream(null)
+    }
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop()
+    }
+    setMediaRecorder(null)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+  }, [stream, mediaRecorder])
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      })
+      setStream(mediaStream)
+      setError('')
+    } catch {
+      setError('Could not access camera. Please allow camera permissions and ensure no other app is using the camera.')
+    }
+  }
+
+  const startRecording = async () => {
+    if (!stream) {
+      await startCamera()
+      // Wait for stream to be available
+      return
+    }
+
+    chunksRef.current = []
+    setRecordedBlob(null)
+    setRecordedUrl('')
+    setRecordingTime(0)
+
+    // Determine supported MIME type
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8'
+        : 'video/webm'
+
+    try {
+      const recorder = new MediaRecorder(stream, { mimeType })
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType })
+        setRecordedBlob(blob)
+        const url = URL.createObjectURL(blob)
+        setRecordedUrl(url)
+
+        // Create a File object from the blob for the API
+        const file = new File([blob], `recording_${Date.now()}.webm`, { type: mimeType })
+        setVideoFile(file)
+
+        // Stop the timer
+        if (timerRef.current) {
+          clearInterval(timerRef.current)
+          timerRef.current = null
+        }
+      }
+
+      recorder.start(1000) // collect data every second
+      setMediaRecorder(recorder)
+      setIsRecording(true)
+
+      // Start timer
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1)
+      }, 1000)
+    } catch (err) {
+      setError('Failed to start recording. Your browser may not support video recording.')
+    }
+  }
+
+  // Auto-start recording once camera stream is ready
+  useEffect(() => {
+    if (stream && !isRecording && !recordedBlob && inputMode === 'record' && !mediaRecorder) {
+      // Stream just became available, start recording
+      startRecording()
+    }
+  }, [stream])
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop()
+    }
+    setIsRecording(false)
+
+    // Stop camera
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+      setStream(null)
+    }
+  }
+
+  const handleReRecord = () => {
+    setRecordedBlob(null)
+    if (recordedUrl) {
+      URL.revokeObjectURL(recordedUrl)
+    }
+    setRecordedUrl('')
+    setVideoFile(null)
+    setRecordingTime(0)
+    setIsRecording(false)
+    setMediaRecorder(null)
+    startCamera()
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -35,7 +189,7 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
 
   const handleProcess = async () => {
     if (!videoFile) {
-      setError('Please select a video file')
+      setError('Please select or record a video')
       return
     }
 
@@ -43,15 +197,9 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
     setError('')
     setProgress(0)
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 5, 90))
-    }, 500)
-
     try {
+      // Upload video — backend returns job_id immediately
       const response = await api.processAttendance(courseId, teacherId, videoFile)
-
-      clearInterval(progressInterval)
-      setProgress(100)
 
       if (response.error) {
         setError(response.error)
@@ -59,35 +207,165 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
         return
       }
 
-      if (response.data?.session_id) {
-        const sessionResponse = await api.getAttendanceSession(response.data.session_id)
-        
-        if (sessionResponse.data) {
-          setSession(sessionResponse.data.session)
-          setRecords(sessionResponse.data.records)
-          setStep('results')
-        } else {
-          setError('Failed to fetch attendance results')
+      const jobId = response.data?.job_id
+      if (!jobId) {
+        setError('No job ID returned')
+        setStep('error')
+        return
+      }
+
+      // Poll for real progress
+      const pollInterval = setInterval(async () => {
+        try {
+          const progressRes = await api.getProcessingProgress(jobId)
+          const job = progressRes.data
+
+          if (!job) {
+            clearInterval(pollInterval)
+            setError('Failed to get processing status')
+            setStep('error')
+            return
+          }
+
+          setProgress(Math.round(job.progress * 100))
+
+          if (job.status === 'completed' && job.session_id) {
+            clearInterval(pollInterval)
+
+            const sessionResponse = await api.getAttendanceSession(job.session_id)
+            if (sessionResponse.data) {
+              setSession(sessionResponse.data.session)
+              setRecords(sessionResponse.data.records)
+              setStep('results')
+            } else {
+              setError('Failed to fetch attendance results')
+              setStep('error')
+            }
+          } else if (job.status === 'error') {
+            clearInterval(pollInterval)
+            setError(job.error || 'Processing failed')
+            setStep('error')
+          }
+        } catch {
+          clearInterval(pollInterval)
+          setError('Lost connection while processing')
           setStep('error')
         }
-      } else {
-        setError('No session ID returned')
-        setStep('error')
-      }
+      }, 1000)
     } catch (err) {
-      clearInterval(progressInterval)
       setError(err instanceof Error ? err.message : 'An error occurred')
       setStep('error')
     }
   }
 
+  const switchInputMode = (mode: InputMode) => {
+    if (mode === inputMode) return
+
+    // Clean up current mode state
+    if (inputMode === 'record') {
+      stopCamera()
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+      setRecordedBlob(null)
+      setRecordedUrl('')
+      setIsRecording(false)
+      setRecordingTime(0)
+    }
+
+    setVideoFile(null)
+    setError('')
+    setInputMode(mode)
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDownloadCSV = async () => {
+    if (!session || records.length === 0) return
+
+    // Fetch course name and teacher name from Supabase
+    let courseName = courseId
+    let teacherName = teacherId
+
+    try {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('name')
+        .eq('id', courseId)
+        .single()
+      if (course?.name) courseName = course.name
+
+      const { data: teacher } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', teacherId)
+        .single()
+      if (teacher?.name) teacherName = teacher.name
+    } catch {
+      // Fall back to IDs if queries fail
+    }
+
+    const dateStr = session.processed_at
+      ? new Date(session.processed_at).toLocaleString()
+      : new Date().toLocaleString()
+
+    // Sort: present first, then absent
+    const sorted = [...records].sort((a, b) => {
+      if (a.is_present === b.is_present) return a.student_name.localeCompare(b.student_name)
+      return a.is_present ? -1 : 1
+    })
+
+    const lines: string[] = [
+      'Attendance Report',
+      `Course,${csvEscape(courseName)}`,
+      `Teacher,${csvEscape(teacherName)}`,
+      `Date,${csvEscape(dateStr)}`,
+      `Total Students,${session.total_students_present + session.total_students_absent}`,
+      `Total Present,${session.total_students_present}`,
+      `Total Absent,${session.total_students_absent}`,
+      '',
+      'Roll No,Student Name,Status,Confidence',
+    ]
+
+    for (const r of sorted) {
+      const status = r.is_present ? 'P' : 'A'
+      const confidence = r.is_present && r.confidence_score
+        ? `${(r.confidence_score * 100).toFixed(1)}%`
+        : '-'
+      lines.push(`${csvEscape(r.student_id)},${csvEscape(r.student_name)},${status},${confidence}`)
+    }
+
+    const csv = lines.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `attendance_${courseName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const csvEscape = (value: string): string => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return value
+  }
+
   const reset = () => {
     setStep('upload')
+    setInputMode('upload')
     setVideoFile(null)
     setError('')
     setSession(null)
     setRecords([])
     setProgress(0)
+    stopCamera()
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+    setRecordedBlob(null)
+    setRecordedUrl('')
+    setIsRecording(false)
+    setRecordingTime(0)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -102,6 +380,12 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}m ${secs}s`
+  }
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0')
+    const secs = (seconds % 60).toString().padStart(2, '0')
+    return `${mins}:${secs}`
   }
 
   const formatDate = (dateStr: string) => {
@@ -119,46 +403,166 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
           <div className="modal-step">
             <h2>Process Attendance</h2>
             <p className="step-description">
-              Upload a video of your classroom. Our AI will detect and recognize enrolled students.
+              Upload or record a video of your classroom. Our AI will detect and recognize enrolled students.
             </p>
-            
-            <div className="upload-area">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/*"
-                onChange={handleFileChange}
-                id="video-upload"
-                className="file-input"
-              />
-              <label htmlFor="video-upload" className="file-label">
-                {videoFile ? (
-                  <div className="file-selected">
-                    <span className="file-icon">📹</span>
-                    <span className="file-name">{videoFile.name}</span>
-                    <span className="file-size">{(videoFile.size / 1024 / 1024).toFixed(2)} MB</span>
-                  </div>
-                ) : (
-                  <div className="file-placeholder">
-                    <span className="file-icon">📁</span>
-                    <span>Click to select video or drag and drop</span>
-                    <span className="file-hint">MP4, AVI, MOV, MKV (max 500MB)</span>
-                  </div>
-                )}
-              </label>
+
+            {/* Tab selector */}
+            <div className="input-mode-tabs">
+              <button
+                className={`tab-btn ${inputMode === 'upload' ? 'active' : ''}`}
+                onClick={() => switchInputMode('upload')}
+              >
+                <span className="tab-icon">📁</span>
+                Upload Video
+              </button>
+              <button
+                className={`tab-btn ${inputMode === 'record' ? 'active' : ''}`}
+                onClick={() => switchInputMode('record')}
+              >
+                <span className="tab-icon">🎥</span>
+                Record Video
+              </button>
             </div>
+
+            {/* Upload mode */}
+            {inputMode === 'upload' && (
+              <>
+                <div className="upload-area">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleFileChange}
+                    id="video-upload"
+                    className="file-input"
+                  />
+                  <label htmlFor="video-upload" className="file-label">
+                    {videoFile ? (
+                      <div className="file-selected">
+                        <span className="file-icon">📹</span>
+                        <span className="file-name">{videoFile.name}</span>
+                        <span className="file-size">{(videoFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                      </div>
+                    ) : (
+                      <div className="file-placeholder">
+                        <span className="file-icon">📁</span>
+                        <span>Click to select video or drag and drop</span>
+                        <span className="file-hint">MP4, AVI, MOV, MKV (max 500MB)</span>
+                      </div>
+                    )}
+                  </label>
+                </div>
+
+                <div className="upload-tips">
+                  <h4>Tips for best results:</h4>
+                  <ul>
+                    <li>Record 10-30 seconds of video</li>
+                    <li>Slowly pan across the classroom</li>
+                    <li>Ensure good lighting</li>
+                    <li>Students should face the camera briefly</li>
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {/* Record mode */}
+            {inputMode === 'record' && (
+              <div className="record-section">
+                {!recordedBlob ? (
+                  <>
+                    {/* Camera preview / pre-record state */}
+                    <div className="record-camera-container">
+                      {stream ? (
+                        <video
+                          ref={videoPreviewRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="record-video-preview"
+                        />
+                      ) : (
+                        <div className="record-placeholder">
+                          <span className="record-placeholder-icon">🎥</span>
+                          <span>Click "Start Recording" to begin</span>
+                        </div>
+                      )}
+
+                      {isRecording && (
+                        <div className="recording-overlay">
+                          <div className="recording-timer">
+                            <span className="recording-dot"></span>
+                            <span className="recording-time">{formatRecordingTime(recordingTime)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="record-controls">
+                      {!isRecording && !stream && (
+                        <button
+                          className="record-btn start-btn"
+                          onClick={startCamera}
+                        >
+                          <span className="btn-icon">⏺</span>
+                          Start Recording
+                        </button>
+                      )}
+                      {isRecording && (
+                        <button
+                          className="record-btn stop-btn"
+                          onClick={stopRecording}
+                        >
+                          <span className="btn-icon">⏹</span>
+                          Stop Recording
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="upload-tips">
+                      <h4>Recording tips:</h4>
+                      <ul>
+                        <li>Record 10-30 seconds</li>
+                        <li>Slowly pan across the classroom</li>
+                        <li>Ensure good lighting conditions</li>
+                        <li>Students should face the camera briefly</li>
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Recorded preview */}
+                    <div className="recorded-preview">
+                      <div className="recorded-header">
+                        <span className="recorded-badge">✓ Video Recorded</span>
+                        <span className="recorded-duration">{formatRecordingTime(recordingTime)}</span>
+                      </div>
+                      <video
+                        ref={recordedVideoRef}
+                        src={recordedUrl}
+                        controls
+                        className="recorded-video"
+                      />
+                      <div className="recorded-info">
+                        <span className="file-size">
+                          {videoFile && `${(videoFile.size / 1024 / 1024).toFixed(2)} MB`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="record-controls">
+                      <button
+                        className="record-btn rerecord-btn"
+                        onClick={handleReRecord}
+                      >
+                        <span className="btn-icon">🔄</span>
+                        Re-record
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {error && <div className="form-error">{error}</div>}
-
-            <div className="upload-tips">
-              <h4>Tips for best results:</h4>
-              <ul>
-                <li>Record 10-30 seconds of video</li>
-                <li>Slowly pan across the classroom</li>
-                <li>Ensure good lighting</li>
-                <li>Students should face the camera briefly</li>
-              </ul>
-            </div>
 
             <div className="modal-actions">
               <button className="btn-secondary" onClick={handleClose}>Cancel</button>
@@ -248,6 +652,7 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
 
             <div className="modal-actions">
               <button className="btn-secondary" onClick={reset}>Process Another</button>
+              <button className="btn-download" onClick={handleDownloadCSV}>Download Report</button>
               <button className="btn-primary" onClick={handleClose}>Done</button>
             </div>
           </div>

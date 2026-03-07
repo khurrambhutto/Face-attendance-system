@@ -37,6 +37,21 @@ class ProcessAttendanceResponse(BaseModel):
     message: str
 
 
+class ProcessingJobResponse(BaseModel):
+    job_id: str
+    message: str
+
+
+class ProcessingProgressResponse(BaseModel):
+    job_id: str
+    status: str  # "processing", "completed", "error"
+    progress: float  # 0.0 to 1.0
+    session_id: Optional[UUID] = None
+    total_students_present: Optional[int] = None
+    total_students_absent: Optional[int] = None
+    error: Optional[str] = None
+
+
 class StudentResponse(BaseModel):
     id: UUID
     student_id: str

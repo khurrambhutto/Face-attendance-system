@@ -154,7 +154,7 @@ class FaceDetector:
         best_similarity = 0.0
 
         for student in enrolled_embeddings:
-            student_id = student.get("id")
+            student_id = student.get("student_id") or student.get("id")
             student_name = student.get("student_name")
             embeddings_list = student.get("embeddings", [])
 
@@ -175,78 +175,87 @@ class FaceDetector:
         video_path: str,
         enrolled_students: List[Dict],
         progress_callback: Optional[Callable[[float], None]] = None,
+        frames_per_second: float = 2.0,
     ) -> Dict:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             return {"error": "Cannot open video"}
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+        # Calculate sample interval: process only N frames per second
+        sample_interval = max(1, int(fps / frames_per_second))
 
         recognized_students: Dict[str, Dict] = {}
         best_frames: Dict[str, Dict] = {}
         face_counts: List[int] = []
         frame_num = 0
+        frames_actually_processed = 0
 
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            faces, face_count = self.detect_faces(frame)
-            face_counts.append(face_count)
+            # Only process sampled frames
+            if frame_num % sample_interval == 0:
+                frames_actually_processed += 1
 
-            if faces is not None and face_count > 0:
-                for face in faces:
-                    embedding = self.get_face_embedding(frame, face)
-                    if embedding is not None:
-                        student_id, student_name, similarity = self.recognize_face(
-                            embedding, enrolled_students
-                        )
+                faces, face_count = self.detect_faces(frame)
+                face_counts.append(face_count)
 
-                        if student_id:
-                            if student_id not in recognized_students:
-                                recognized_students[student_id] = {
-                                    "student_name": student_name,
-                                    "frames_detected": 0,
-                                    "best_similarity": 0.0,
-                                }
+                if faces is not None and face_count > 0:
+                    for face in faces:
+                        embedding = self.get_face_embedding(frame, face)
+                        if embedding is not None:
+                            student_id, student_name, similarity = self.recognize_face(
+                                embedding, enrolled_students
+                            )
 
-                            recognized_students[student_id]["frames_detected"] += 1
+                            if student_id:
+                                if student_id not in recognized_students:
+                                    recognized_students[student_id] = {
+                                        "student_name": student_name,
+                                        "frames_detected": 0,
+                                        "best_similarity": 0.0,
+                                    }
 
-                            if (
-                                similarity
-                                > recognized_students[student_id]["best_similarity"]
-                            ):
-                                recognized_students[student_id]["best_similarity"] = (
+                                recognized_students[student_id]["frames_detected"] += 1
+
+                                if (
                                     similarity
-                                )
+                                    > recognized_students[student_id]["best_similarity"]
+                                ):
+                                    recognized_students[student_id]["best_similarity"] = (
+                                        similarity
+                                    )
 
-                                x, y, w, h = (
-                                    int(face[0]),
-                                    int(face[1]),
-                                    int(face[2]),
-                                    int(face[3]),
-                                )
-                                best_frame = frame.copy()
-                                cv2.rectangle(
-                                    best_frame, (x, y), (x + w, y + h), (0, 255, 0), 2
-                                )
-                                label = f"{student_name} ({similarity:.0%})"
-                                cv2.putText(
-                                    best_frame,
-                                    label,
-                                    (x, y - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.6,
-                                    (0, 255, 0),
-                                    2,
-                                )
-                                best_frames[student_id] = {
-                                    "frame_num": frame_num,
-                                    "image": best_frame,
-                                    "similarity": similarity,
-                                }
+                                    x, y, w, h = (
+                                        int(face[0]),
+                                        int(face[1]),
+                                        int(face[2]),
+                                        int(face[3]),
+                                    )
+                                    best_frame = frame.copy()
+                                    cv2.rectangle(
+                                        best_frame, (x, y), (x + w, y + h), (0, 255, 0), 2
+                                    )
+                                    label = f"{student_name} ({similarity:.0%})"
+                                    cv2.putText(
+                                        best_frame,
+                                        label,
+                                        (x, y - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.6,
+                                        (0, 255, 0),
+                                        2,
+                                    )
+                                    best_frames[student_id] = {
+                                        "frame_num": frame_num,
+                                        "image": best_frame,
+                                        "similarity": similarity,
+                                    }
 
             if progress_callback:
                 progress_callback((frame_num + 1) / total_frames)
@@ -257,8 +266,10 @@ class FaceDetector:
 
         return {
             "total_frames": total_frames,
-            "frames_processed": frame_num,
+            "frames_processed": frames_actually_processed,
+            "frames_sampled_from": frame_num,
             "fps": fps,
+            "sample_interval": sample_interval,
             "recognized_students": recognized_students,
             "best_frames": best_frames,
             "face_counts": face_counts,
