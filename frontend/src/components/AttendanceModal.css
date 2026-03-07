@@ -416,6 +416,22 @@
   background: #e0e0e0;
 }
 
+.btn-download {
+  background: #059669;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-download:hover {
+  background: #047857;
+}
+
 /* ── Processing ── */
 
 .processing-animation {

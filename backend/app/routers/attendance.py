@@ -109,7 +109,7 @@ def _process_video_in_background(
 
         absent_students = []
         for student in enrolled_students:
-            sid = student.get("id")
+            sid = student.get("student_id") or student.get("id")
             found = any(p["student_id"] == sid for p in present_students)
             if not found:
                 absent_students.append(
@@ -144,7 +144,7 @@ def _process_video_in_background(
                 )
 
             enrollment = next(
-                (s for s in enrolled_students if s.get("id") == student["student_id"]),
+                (s for s in enrolled_students if s.get("student_id") == student["student_id"]),
                 None,
             )
 
@@ -165,7 +165,7 @@ def _process_video_in_background(
                 (
                     s
                     for s in enrolled_students
-                    if s.get("id") == student.get("student_id")
+                    if s.get("student_id") == student.get("student_id")
                 ),
                 None,
             )

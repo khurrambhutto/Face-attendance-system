@@ -154,7 +154,7 @@ class FaceDetector:
         best_similarity = 0.0
 
         for student in enrolled_embeddings:
-            student_id = student.get("id")
+            student_id = student.get("student_id") or student.get("id")
             student_name = student.get("student_name")
             embeddings_list = student.get("embeddings", [])
 

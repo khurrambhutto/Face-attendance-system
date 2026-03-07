@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import './AttendanceModal.css'
 import { api, type AttendanceRecord, type AttendanceSession } from '../lib/api'
+import { supabase } from '../lib/supabase'
 
 interface AttendanceModalProps {
   isOpen: boolean
@@ -277,6 +278,78 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const handleDownloadCSV = async () => {
+    if (!session || records.length === 0) return
+
+    // Fetch course name and teacher name from Supabase
+    let courseName = courseId
+    let teacherName = teacherId
+
+    try {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('name')
+        .eq('id', courseId)
+        .single()
+      if (course?.name) courseName = course.name
+
+      const { data: teacher } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', teacherId)
+        .single()
+      if (teacher?.name) teacherName = teacher.name
+    } catch {
+      // Fall back to IDs if queries fail
+    }
+
+    const dateStr = session.processed_at
+      ? new Date(session.processed_at).toLocaleString()
+      : new Date().toLocaleString()
+
+    // Sort: present first, then absent
+    const sorted = [...records].sort((a, b) => {
+      if (a.is_present === b.is_present) return a.student_name.localeCompare(b.student_name)
+      return a.is_present ? -1 : 1
+    })
+
+    const lines: string[] = [
+      'Attendance Report',
+      `Course,${csvEscape(courseName)}`,
+      `Teacher,${csvEscape(teacherName)}`,
+      `Date,${csvEscape(dateStr)}`,
+      `Total Students,${session.total_students_present + session.total_students_absent}`,
+      `Total Present,${session.total_students_present}`,
+      `Total Absent,${session.total_students_absent}`,
+      '',
+      'Roll No,Student Name,Status,Confidence',
+    ]
+
+    for (const r of sorted) {
+      const status = r.is_present ? 'P' : 'A'
+      const confidence = r.is_present && r.confidence_score
+        ? `${(r.confidence_score * 100).toFixed(1)}%`
+        : '-'
+      lines.push(`${csvEscape(r.student_id)},${csvEscape(r.student_name)},${status},${confidence}`)
+    }
+
+    const csv = lines.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `attendance_${courseName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const csvEscape = (value: string): string => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return value
   }
 
   const reset = () => {
@@ -579,6 +652,7 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
 
             <div className="modal-actions">
               <button className="btn-secondary" onClick={reset}>Process Another</button>
+              <button className="btn-download" onClick={handleDownloadCSV}>Download Report</button>
               <button className="btn-primary" onClick={handleClose}>Done</button>
             </div>
           </div>
