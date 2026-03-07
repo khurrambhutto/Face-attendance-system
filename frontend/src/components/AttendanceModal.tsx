@@ -196,15 +196,9 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
     setError('')
     setProgress(0)
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 5, 90))
-    }, 500)
-
     try {
+      // Upload video — backend returns job_id immediately
       const response = await api.processAttendance(courseId, teacherId, videoFile)
-
-      clearInterval(progressInterval)
-      setProgress(100)
 
       if (response.error) {
         setError(response.error)
@@ -212,23 +206,52 @@ export function AttendanceModal({ isOpen, onClose, courseId, teacherId }: Attend
         return
       }
 
-      if (response.data?.session_id) {
-        const sessionResponse = await api.getAttendanceSession(response.data.session_id)
-        
-        if (sessionResponse.data) {
-          setSession(sessionResponse.data.session)
-          setRecords(sessionResponse.data.records)
-          setStep('results')
-        } else {
-          setError('Failed to fetch attendance results')
+      const jobId = response.data?.job_id
+      if (!jobId) {
+        setError('No job ID returned')
+        setStep('error')
+        return
+      }
+
+      // Poll for real progress
+      const pollInterval = setInterval(async () => {
+        try {
+          const progressRes = await api.getProcessingProgress(jobId)
+          const job = progressRes.data
+
+          if (!job) {
+            clearInterval(pollInterval)
+            setError('Failed to get processing status')
+            setStep('error')
+            return
+          }
+
+          setProgress(Math.round(job.progress * 100))
+
+          if (job.status === 'completed' && job.session_id) {
+            clearInterval(pollInterval)
+
+            const sessionResponse = await api.getAttendanceSession(job.session_id)
+            if (sessionResponse.data) {
+              setSession(sessionResponse.data.session)
+              setRecords(sessionResponse.data.records)
+              setStep('results')
+            } else {
+              setError('Failed to fetch attendance results')
+              setStep('error')
+            }
+          } else if (job.status === 'error') {
+            clearInterval(pollInterval)
+            setError(job.error || 'Processing failed')
+            setStep('error')
+          }
+        } catch {
+          clearInterval(pollInterval)
+          setError('Lost connection while processing')
           setStep('error')
         }
-      } else {
-        setError('No session ID returned')
-        setStep('error')
-      }
+      }, 1000)
     } catch (err) {
-      clearInterval(progressInterval)
       setError(err instanceof Error ? err.message : 'An error occurred')
       setStep('error')
     }
